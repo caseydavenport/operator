@@ -45,9 +45,15 @@ var (
 	// The port used by calico/node to report Calico Enterprise internal metrics.
 	// This is separate from the calico/node prometheus metrics port, which is user configurable.
 	nodeReporterPort int32 = 9081
+
 	// The port used by calico/node to report Calico Enterprise BGP metrics.
 	// This is currently not intended to be user configurable.
 	nodeBGPReporterPort int32 = 9900
+
+	// CASEY: TODO: HACK: We need to change the cluster-role and cluster-role-binding names so that
+	// we don't overwrite the resources used by OSS Calico. Otherwise, we remove permissions from the CNI
+	// plugin by switching the binding to point at the enterprise calico/node.
+	rbacName string = "calico-node-op"
 )
 
 // Node creates the node daemonset and other resources for the daemonset to operate normally.
@@ -116,13 +122,13 @@ func (c *nodeComponent) nodeRoleBinding() *rbacv1.ClusterRoleBinding {
 	crb := &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:   "calico-node",
+			Name:   rbacName,
 			Labels: map[string]string{},
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     "calico-node",
+			Name:     rbacName,
 		},
 		Subjects: []rbacv1.Subject{
 			{
@@ -143,7 +149,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 	role := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:   "calico-node",
+			Name:   rbacName,
 			Labels: map[string]string{},
 		},
 
@@ -923,6 +929,9 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		}
 		nodeEnv = append(nodeEnv, extraNodeEnv...)
 	}
+
+	// CASEY: TODO: HACK: Change health port to not conflict.
+	nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_HEALTHPORT", Value: "9199"})
 
 	// Configure provider specific environment variables here.
 	switch c.provider {

@@ -524,6 +524,9 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 
+	// CASEY: TODO: HACK: disable migration entirely.
+	needNsMigration = false
+
 	// Create a component handler to manage the rendered components.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
@@ -645,10 +648,12 @@ func (r *ReconcileInstallation) Reconcile(request reconcile.Request) (reconcile.
 func GenerateRenderConfig(install *operator.Installation) render.NetworkConfig {
 	config := render.NetworkConfig{CNI: render.CNINone}
 
+	// CASEY: TODO: HACK: Always disable Calico networking.
+	//
 	// If CalicoNetwork is specified, then use Calico networking.
-	if install.Spec.CalicoNetwork != nil {
-		config.CNI = render.CNICalico
-	}
+	// if install.Spec.CalicoNetwork != nil {
+	// 	config.CNI = render.CNICalico
+	// }
 
 	// Set other provider-specific settings.
 	switch install.Spec.KubernetesProvider {

@@ -43,17 +43,20 @@ type kubeControllersComponent struct {
 }
 
 func (c *kubeControllersComponent) Objects() ([]runtime.Object, []runtime.Object) {
-	kubeControllerObjects := []runtime.Object{
-		c.controllersServiceAccount(),
-		c.controllersRole(),
-		c.controllersRoleBinding(),
-		c.controllersDeployment(),
-	}
-	if c.managerInternalSecret != nil {
-		kubeControllerObjects = append(kubeControllerObjects, secretsToRuntimeObjects(CopySecrets(common.CalicoNamespace, c.managerInternalSecret)...)...)
-	}
+	// CASEY: TODO: HACK: disable kube-controllers in private.
+	return nil, nil
 
-	return kubeControllerObjects, nil
+	// kubeControllerObjects := []runtime.Object{
+	// 	c.controllersServiceAccount(),
+	// 	c.controllersRole(),
+	// 	c.controllersRoleBinding(),
+	// 	c.controllersDeployment(),
+	// }
+	// if c.managerInternalSecret != nil {
+	// 	kubeControllerObjects = append(kubeControllerObjects, secretsToRuntimeObjects(CopySecrets(common.CalicoNamespace, c.managerInternalSecret)...)...)
+	// }
+
+	// return kubeControllerObjects, nil
 }
 
 func (c *kubeControllersComponent) Ready() bool {
@@ -292,8 +295,8 @@ func (c *kubeControllersComponent) annotations() map[string]string {
 		return make(map[string]string)
 	}
 
-	return map[string]string {
-		ManagerInternalTLSHashAnnotation : AnnotationHash(c.managerInternalSecret.Data),
+	return map[string]string{
+		ManagerInternalTLSHashAnnotation: AnnotationHash(c.managerInternalSecret.Data),
 	}
 }
 
