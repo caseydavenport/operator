@@ -43,20 +43,17 @@ type kubeControllersComponent struct {
 }
 
 func (c *kubeControllersComponent) Objects() ([]runtime.Object, []runtime.Object) {
-	// CASEY: TODO: HACK: disable kube-controllers in private.
-	return nil, nil
+	kubeControllerObjects := []runtime.Object{
+		c.controllersServiceAccount(),
+		c.controllersRole(),
+		c.controllersRoleBinding(),
+		c.controllersDeployment(),
+	}
+	if c.managerInternalSecret != nil {
+		kubeControllerObjects = append(kubeControllerObjects, secretsToRuntimeObjects(CopySecrets(common.CalicoNamespace, c.managerInternalSecret)...)...)
+	}
 
-	// kubeControllerObjects := []runtime.Object{
-	// 	c.controllersServiceAccount(),
-	// 	c.controllersRole(),
-	// 	c.controllersRoleBinding(),
-	// 	c.controllersDeployment(),
-	// }
-	// if c.managerInternalSecret != nil {
-	// 	kubeControllerObjects = append(kubeControllerObjects, secretsToRuntimeObjects(CopySecrets(common.CalicoNamespace, c.managerInternalSecret)...)...)
-	// }
-
-	// return kubeControllerObjects, nil
+	return kubeControllerObjects, nil
 }
 
 func (c *kubeControllersComponent) Ready() bool {
@@ -78,7 +75,8 @@ func (c *kubeControllersComponent) controllersRole() *rbacv1.ClusterRole {
 	role := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "calico-kube-controllers",
+			// CASEY: TODO: HACK: Need unique names to not conflict with OSS.
+			Name: "calico-kube-controllers-op",
 		},
 		Rules: []rbacv1.PolicyRule{
 			{
@@ -167,13 +165,14 @@ func (c *kubeControllersComponent) controllersRoleBinding() *rbacv1.ClusterRoleB
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:   "calico-kube-controllers",
+			// CASEY: TODO: HACK: Need unique names to not conflict with OSS.
+			Name:   "calico-kube-controllers-op",
 			Labels: map[string]string{},
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     "calico-kube-controllers",
+			Name:     "calico-kube-controllers-op",
 		},
 		Subjects: []rbacv1.Subject{
 			{
@@ -195,7 +194,9 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 	}
 
-	enabledControllers := []string{"node"}
+	// CASEY: TODO: HACK: Turn off the node controller for enterprise.
+	// enabledControllers := []string{"node"}
+	enabledControllers := []string{}
 	if c.cr.Spec.Variant == operator.TigeraSecureEnterprise {
 		enabledControllers = append(enabledControllers, "service")
 
