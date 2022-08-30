@@ -51,9 +51,11 @@ const (
 	GuardianPolicyName             = networkpolicy.TigeraComponentPolicyPrefix + "guardian-access"
 )
 
-var GuardianEntityRule = networkpolicy.CreateEntityRule(GuardianNamespace, GuardianDeploymentName, GuardianTargetPort)
-var GuardianSourceEntityRule = networkpolicy.CreateSourceEntityRule(GuardianNamespace, GuardianDeploymentName)
-var GuardianServiceSelectorEntityRule = networkpolicy.CreateServiceSelectorEntityRule(GuardianNamespace, GuardianName)
+var (
+	GuardianEntityRule                = networkpolicy.CreateEntityRule(GuardianNamespace, GuardianDeploymentName, GuardianTargetPort)
+	GuardianSourceEntityRule          = networkpolicy.CreateSourceEntityRule(GuardianNamespace, GuardianDeploymentName)
+	GuardianServiceSelectorEntityRule = networkpolicy.CreateServiceSelectorEntityRule(GuardianNamespace, GuardianName)
+)
 
 func Guardian(cfg *GuardianConfiguration) Component {
 	return &GuardianComponent{
@@ -350,8 +352,8 @@ func guardianAllowTigeraPolicy(cfg *GuardianConfiguration) (*v3.NetworkPolicy, e
 	if err != nil {
 		return nil, err
 	}
-	parsedIp := net.ParseIP(host)
-	if parsedIp == nil {
+	parsedIP := net.ParseIP(host)
+	if parsedIP == nil {
 		// Assume host is a valid hostname.
 		egressRules = append(egressRules, v3.Rule{
 			Action:   v3.Allow,
@@ -363,7 +365,7 @@ func guardianAllowTigeraPolicy(cfg *GuardianConfiguration) (*v3.NetworkPolicy, e
 		})
 	} else {
 		var netSuffix string
-		if parsedIp.To4() != nil {
+		if parsedIP.To4() != nil {
 			netSuffix = "/32"
 		} else {
 			netSuffix = "/128"
@@ -373,7 +375,7 @@ func guardianAllowTigeraPolicy(cfg *GuardianConfiguration) (*v3.NetworkPolicy, e
 			Action:   v3.Allow,
 			Protocol: &networkpolicy.TCPProtocol,
 			Destination: v3.EntityRule{
-				Nets:  []string{parsedIp.String() + netSuffix},
+				Nets:  []string{parsedIP.String() + netSuffix},
 				Ports: []numorstring.Port{parsedPort},
 			},
 		})

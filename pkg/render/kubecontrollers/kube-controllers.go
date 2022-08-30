@@ -82,7 +82,7 @@ type KubeControllersConfiguration struct {
 	Terminating bool
 
 	// Secrets - provided by the caller. Used to generate secrets in the destination
-	// namespace to be returned by the rendered. Expected that the calling code
+	// namespace to be returned by the renderer. Expected that the calling code
 	// take care to pass the same secret on each reconcile where possible.
 	ManagerInternalSecret        certificatemanagement.KeyPairInterface
 	KubeControllersGatewaySecret *corev1.Secret

@@ -76,12 +76,14 @@ const (
 const (
 	VoltronName              = "tigera-voltron"
 	VoltronTunnelSecretName  = "tigera-management-cluster-connection"
-	defaultVoltronPort       = "9443"
+	defaultVoltronPort       = 9443
 	defaultTunnelVoltronPort = "9449"
 )
 
-var ManagerEntityRule = networkpolicy.CreateEntityRule(ManagerNamespace, ManagerDeploymentName, managerPort)
-var ManagerSourceEntityRule = networkpolicy.CreateSourceEntityRule(ManagerNamespace, ManagerDeploymentName)
+var (
+	ManagerEntityRule       = networkpolicy.CreateEntityRule(ManagerNamespace, ManagerDeploymentName, managerPort)
+	ManagerSourceEntityRule = networkpolicy.CreateSourceEntityRule(ManagerNamespace, ManagerDeploymentName)
+)
 
 func Manager(cfg *ManagerConfiguration) (Component, error) {
 	var tlsSecrets []*corev1.Secret
@@ -149,6 +151,9 @@ func (c *managerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
+	// TODO:
+	c.managerImage = "gcr.io/unique-caldron-775/casey/cnx-manager:latest"
+
 	c.proxyImage, err = components.GetReference(components.ComponentManagerProxy, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
@@ -201,8 +206,15 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 		// If we're not running openshift, we need to add pod security policies.
 		objs = append(objs, c.managerPodSecurityPolicy())
 	}
+
+	// Include a Voltron deployment and service as well.
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ManagerNamespace, c.cfg.ESSecrets...)...)...)
 	objs = append(objs, c.managerDeployment())
+
+	// Include a Voltron deployment and service as well.
+	objs = append(objs, c.voltronDeployment())
+	objs = append(objs, c.voltronService())
+
 	if c.cfg.KeyValidatorConfig != nil {
 		objs = append(objs, configmap.ToRuntimeObjects(c.cfg.KeyValidatorConfig.RequiredConfigMaps(ManagerNamespace)...)...)
 	}
@@ -236,7 +248,6 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 			Containers: []corev1.Container{
 				relasticsearch.ContainerDecorate(c.managerContainer(), c.cfg.ESClusterConfig.ClusterName(), ElasticsearchManagerUserSecret, c.cfg.ClusterDomain, c.SupportedOSType()),
 				relasticsearch.ContainerDecorate(c.managerEsProxyContainer(), c.cfg.ESClusterConfig.ClusterName(), ElasticsearchManagerUserSecret, c.cfg.ClusterDomain, c.SupportedOSType()),
-				c.managerProxyContainer(),
 			},
 			Volumes: c.managerVolumes(),
 		},
@@ -263,7 +274,50 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 	return d
 }
 
-// managerVolumes returns the volumes for the Tigera Secure manager component.
+// voltronDeployment creates a deployment for voltron.
+// TODO: Split voltron into separate component.
+// TODO: Use a separate service account.
+func (c *managerComponent) voltronDeployment() *appsv1.Deployment {
+	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        VoltronName,
+			Namespace:   ManagerNamespace,
+			Annotations: c.tlsAnnotations,
+		},
+		Spec: corev1.PodSpec{
+			NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
+			ServiceAccountName: ManagerServiceAccount,
+			Tolerations:        c.managerTolerations(),
+			ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
+			Containers: []corev1.Container{
+				c.managerProxyContainer(),
+			},
+			Volumes: c.managerVolumes(),
+		},
+	}, c.cfg.ESClusterConfig, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
+
+	if c.cfg.Replicas != nil && *c.cfg.Replicas > 1 {
+		podTemplate.Spec.Affinity = podaffinity.NewPodAntiAffinity("tigera-manager", ManagerNamespace)
+	}
+
+	d := &appsv1.Deployment{
+		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      VoltronName,
+			Namespace: ManagerNamespace,
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: c.cfg.Replicas,
+			Strategy: appsv1.DeploymentStrategy{
+				Type: appsv1.RecreateDeploymentStrategyType,
+			},
+			Template: *podTemplate,
+		},
+	}
+	return d
+}
+
+// managerVolumeMounts returns the volume mounts for the manager deployment.
 func (c *managerComponent) managerVolumeMounts() []corev1.VolumeMount {
 	if c.cfg.KeyValidatorConfig != nil {
 		trustedVolumeMount := c.cfg.TrustedCertBundle.VolumeMount(c.SupportedOSType())
@@ -343,15 +397,17 @@ func (c *managerComponent) managerEnvVars() []corev1.EnvVar {
 		{Name: "CNX_PROMETHEUS_API_URL", Value: fmt.Sprintf("/api/v1/namespaces/%s/services/calico-node-prometheus:9090/proxy/api/v1", common.TigeraPrometheusNamespace)},
 		{Name: "CNX_COMPLIANCE_REPORTS_API_URL", Value: "/compliance/reports"},
 		{Name: "CNX_QUERY_API_URL", Value: "/api/v1/namespaces/tigera-system/services/https:tigera-api:8080/proxy"},
-		{Name: "CNX_ELASTICSEARCH_API_URL", Value: "/tigera-elasticsearch"},
-		{Name: "CNX_ELASTICSEARCH_KIBANA_URL", Value: fmt.Sprintf("/%s", KibanaBasePath)},
+		{Name: "CNX_ELASTICSEARCH_API_URL", Value: "https://tigera-voltron:9443/tigera-elasticsearch"},
+		{Name: "CNX_ELASTICSEARCH_KIBANA_URL", Value: fmt.Sprintf("https://tigera-voltron:9443/%s", KibanaBasePath)},
 		{Name: "CNX_ENABLE_ERROR_TRACKING", Value: "false"},
 		{Name: "CNX_ALP_SUPPORT", Value: "true"},
 		{Name: "CNX_CLUSTER_NAME", Value: "cluster"},
 		{Name: "CNX_POLICY_RECOMMENDATION_SUPPORT", Value: "true"},
 		{Name: "ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.cfg.ManagementCluster != nil)},
+
 		// Kibana does not have a FIPS compatible mode, therefore we disable the button in the UI.
 		{Name: "ENABLE_KIBANA", Value: strconv.FormatBool(!operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode))},
+
 		// The manager supports two states of a product feature being unavailable: the product feature being feature-flagged off,
 		// and the current license not enabling the feature. The compliance flag that we set on the manager container is a feature
 		// flag, which we should set purely based on whether the compliance CR is present, ignoring the license status.
@@ -365,10 +421,11 @@ func (c *managerComponent) managerEnvVars() []corev1.EnvVar {
 // managerContainer returns the manager container.
 func (c *managerComponent) managerContainer() corev1.Container {
 	tm := corev1.Container{
-		Name:          "tigera-manager",
-		Image:         c.managerImage,
-		Env:           c.managerEnvVars(),
-		LivenessProbe: c.managerProbe(),
+		Name:            "tigera-manager",
+		Image:           c.managerImage,
+		ImagePullPolicy: corev1.PullAlways,
+		Env:             c.managerEnvVars(),
+		LivenessProbe:   c.managerProbe(),
 		// UID 999 is used in the manager Dockerfile.
 		SecurityContext: securitycontext.NewBaseContext(999, 0),
 		VolumeMounts:    c.managerVolumeMounts(),
@@ -412,9 +469,9 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 		tunnelKeyPath, tunnelCertPath = c.cfg.TunnelSecret.VolumeMountKeyFilePath(), c.cfg.TunnelSecret.VolumeMountCertificateFilePath()
 	}
 	env := []corev1.EnvVar{
-		{Name: "VOLTRON_PORT", Value: defaultVoltronPort},
+		{Name: "VOLTRON_PORT", Value: fmt.Sprintf("%d", defaultVoltronPort)},
 		{Name: "VOLTRON_COMPLIANCE_ENDPOINT", Value: fmt.Sprintf("https://compliance.%s.svc.%s", ComplianceNamespace, c.cfg.ClusterDomain)},
-		{Name: "VOLTRON_LOGLEVEL", Value: "Info"},
+		{Name: "VOLTRON_LOGLEVEL", Value: "Debug"},
 		{Name: "VOLTRON_KIBANA_ENDPOINT", Value: rkibana.HTTPSEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain)},
 		{Name: "VOLTRON_KIBANA_BASE_PATH", Value: fmt.Sprintf("/%s/", KibanaBasePath)},
 		{Name: "VOLTRON_KIBANA_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
@@ -436,6 +493,11 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 		{Name: "VOLTRON_DEFAULT_FORWARD_SERVER", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc:9200"},
 		{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: strconv.FormatBool(c.cfg.Compliance != nil && c.cfg.ComplianceLicenseActive)},
 		{Name: "VOLTRON_FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
+
+		// NGINX_ENDPOINT is the location of the Manager UI. It's default config is to listen on localhost:8080. Since we're splitting, we
+		// need it to bind to an externally reachable address.
+		{Name: "VOLTRON_NGINX_ENDPOINT", Value: fmt.Sprintf("http://tigera-manager.%s.svc.%s:8080", ManagerNamespace, c.cfg.ClusterDomain)},
+		{Name: "VOLTRON_ELASTIC_ENDPOINT", Value: fmt.Sprintf("http://tigera-manager.%s.svc.%s:8443", ManagerNamespace, c.cfg.ClusterDomain)},
 	}
 
 	if c.cfg.ManagementCluster != nil {
@@ -477,6 +539,9 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 		{Name: "ELASTIC_LICENSE_TYPE", Value: string(c.cfg.ESLicenseType)},
 		{Name: "ELASTIC_KIBANA_ENDPOINT", Value: rkibana.HTTPSEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain)},
 		{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
+
+		// TODO
+		{Name: "LISTEN_ADDR", Value: "0.0.0.0:8443"},
 	}
 
 	volumeMounts := []corev1.VolumeMount{c.cfg.TrustedCertBundle.VolumeMount(c.SupportedOSType())}
@@ -504,6 +569,30 @@ func (c *managerComponent) managerTolerations() []corev1.Toleration {
 	return append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateCriticalAddonsAndControlPlane...)
 }
 
+// voltronService returns the service exposing the Tigera Secure web app.
+func (c *managerComponent) voltronService() *corev1.Service {
+	return &corev1.Service{
+		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      VoltronName,
+			Namespace: ManagerNamespace,
+		},
+		Spec: corev1.ServiceSpec{
+			Ports: []corev1.ServicePort{
+				{
+					Port:       int32(defaultVoltronPort),
+					Protocol:   corev1.ProtocolTCP,
+					TargetPort: intstr.FromInt(defaultVoltronPort),
+					Name:       "https",
+				},
+			},
+			Selector: map[string]string{
+				"k8s-app": VoltronName,
+			},
+		},
+	}
+}
+
 // managerService returns the service exposing the Tigera Secure web app.
 func (c *managerComponent) managerService() *corev1.Service {
 	return &corev1.Service{
@@ -518,6 +607,13 @@ func (c *managerComponent) managerService() *corev1.Service {
 					Port:       managerPort,
 					Protocol:   corev1.ProtocolTCP,
 					TargetPort: intstr.FromInt(managerTargetPort),
+					Name:       "https",
+				},
+				{
+					Port:       8080,
+					Protocol:   corev1.ProtocolTCP,
+					TargetPort: intstr.FromInt(8080),
+					Name:       "http",
 				},
 			},
 			Selector: map[string]string{
