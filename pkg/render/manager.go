@@ -50,6 +50,7 @@ import (
 const (
 	managerPort                  = 9443
 	managerTargetPort            = 9443
+	managerNginxPort             = 8080 // TODO(CASEY): Should be HTTPS
 	ManagerServiceName           = "tigera-manager"
 	ManagerDeploymentName        = "tigera-manager"
 	ManagerNamespace             = "tigera-manager"
@@ -195,9 +196,7 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 		managerClusterWideDefaultView(),
 	)
 	objs = append(objs, c.getTLSObjects()...)
-	objs = append(objs,
-		c.managerService(),
-	)
+	objs = append(objs, c.managerService(), c.esProxyService())
 
 	// If we're running on openshift, we need to add in an SCC.
 	if c.cfg.Openshift {
@@ -257,6 +256,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 		podTemplate.Spec.Affinity = podaffinity.NewPodAntiAffinity("tigera-manager", ManagerNamespace)
 	}
 
+	surge := intstr.FromInt(1)
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -266,7 +266,10 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 		Spec: appsv1.DeploymentSpec{
 			Replicas: c.cfg.Replicas,
 			Strategy: appsv1.DeploymentStrategy{
-				Type: appsv1.RecreateDeploymentStrategyType,
+				Type: appsv1.RollingUpdateDeploymentStrategyType,
+				RollingUpdate: &appsv1.RollingUpdateDeployment{
+					MaxSurge: &surge,
+				},
 			},
 			Template: *podTemplate,
 		},
@@ -352,8 +355,8 @@ func (c *managerComponent) managerProbe() *corev1.Probe {
 		ProbeHandler: corev1.ProbeHandler{
 			HTTPGet: &corev1.HTTPGetAction{
 				Path:   "/",
-				Port:   intstr.FromInt(managerPort),
-				Scheme: corev1.URISchemeHTTPS,
+				Port:   intstr.FromInt(managerNginxPort),
+				Scheme: corev1.URISchemeHTTP, // TODO(CASEY)
 			},
 		},
 		InitialDelaySeconds: 90,
@@ -366,8 +369,8 @@ func (c *managerComponent) managerEsProxyProbe() *corev1.Probe {
 	return &corev1.Probe{
 		ProbeHandler: corev1.ProbeHandler{
 			HTTPGet: &corev1.HTTPGetAction{
-				Path:   "/tigera-elasticsearch/version",
-				Port:   intstr.FromInt(managerPort),
+				Path:   "/version",           // CASEY: Used to go via Voltron, which would strip this path.
+				Port:   intstr.FromInt(8443), // TODO(CASEY)
 				Scheme: corev1.URISchemeHTTPS,
 			},
 		},
@@ -376,8 +379,8 @@ func (c *managerComponent) managerEsProxyProbe() *corev1.Probe {
 	}
 }
 
-// managerProxyProbe returns the probe for the proxy container.
-func (c *managerComponent) managerProxyProbe() *corev1.Probe {
+// voltronProbe returns the probe for the proxy container.
+func (c *managerComponent) voltronProbe() *corev1.Probe {
 	return &corev1.Probe{
 		ProbeHandler: corev1.ProbeHandler{
 			HTTPGet: &corev1.HTTPGetAction{
@@ -397,8 +400,8 @@ func (c *managerComponent) managerEnvVars() []corev1.EnvVar {
 		{Name: "CNX_PROMETHEUS_API_URL", Value: fmt.Sprintf("/api/v1/namespaces/%s/services/calico-node-prometheus:9090/proxy/api/v1", common.TigeraPrometheusNamespace)},
 		{Name: "CNX_COMPLIANCE_REPORTS_API_URL", Value: "/compliance/reports"},
 		{Name: "CNX_QUERY_API_URL", Value: "/api/v1/namespaces/tigera-system/services/https:tigera-api:8080/proxy"},
-		{Name: "CNX_ELASTICSEARCH_API_URL", Value: "https://tigera-voltron:9443/tigera-elasticsearch"},
-		{Name: "CNX_ELASTICSEARCH_KIBANA_URL", Value: fmt.Sprintf("https://tigera-voltron:9443/%s", KibanaBasePath)},
+		{Name: "CNX_ELASTICSEARCH_API_URL", Value: "/tigera-elasticsearch"},
+		{Name: "CNX_ELASTICSEARCH_KIBANA_URL", Value: fmt.Sprintf("/%s", KibanaBasePath)},
 		{Name: "CNX_ENABLE_ERROR_TRACKING", Value: "false"},
 		{Name: "CNX_ALP_SUPPORT", Value: "true"},
 		{Name: "CNX_CLUSTER_NAME", Value: "cluster"},
@@ -497,7 +500,7 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 		// NGINX_ENDPOINT is the location of the Manager UI. It's default config is to listen on localhost:8080. Since we're splitting, we
 		// need it to bind to an externally reachable address.
 		{Name: "VOLTRON_NGINX_ENDPOINT", Value: fmt.Sprintf("http://tigera-manager.%s.svc.%s:8080", ManagerNamespace, c.cfg.ClusterDomain)},
-		{Name: "VOLTRON_ELASTIC_ENDPOINT", Value: fmt.Sprintf("http://tigera-manager.%s.svc.%s:8443", ManagerNamespace, c.cfg.ClusterDomain)},
+		{Name: "VOLTRON_ELASTIC_ENDPOINT", Value: fmt.Sprintf("https://tigera-es-proxy.%s.svc.%s:8443", ManagerNamespace, c.cfg.ClusterDomain)},
 	}
 
 	if c.cfg.ManagementCluster != nil {
@@ -513,7 +516,7 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 		Image:         c.proxyImage,
 		Env:           env,
 		VolumeMounts:  c.volumeMountsForProxyManager(),
-		LivenessProbe: c.managerProxyProbe(),
+		LivenessProbe: c.voltronProbe(),
 		// UID 1001 is used in the voltron Dockerfile.
 		SecurityContext: securitycontext.NewBaseContext(1001, 0),
 	}
@@ -614,6 +617,30 @@ func (c *managerComponent) managerService() *corev1.Service {
 					Protocol:   corev1.ProtocolTCP,
 					TargetPort: intstr.FromInt(8080),
 					Name:       "http",
+				},
+			},
+			Selector: map[string]string{
+				"k8s-app": ManagerDeploymentName,
+			},
+		},
+	}
+}
+
+// esProxyService returns the service exposing the Tigera Secure web app.
+func (c *managerComponent) esProxyService() *corev1.Service {
+	return &corev1.Service{
+		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "tigera-es-proxy",
+			Namespace: ManagerNamespace,
+		},
+		Spec: corev1.ServiceSpec{
+			Ports: []corev1.ServicePort{
+				{
+					Port:       8443,
+					Protocol:   corev1.ProtocolTCP,
+					TargetPort: intstr.FromInt(8443),
+					Name:       "https",
 				},
 			},
 			Selector: map[string]string{
@@ -899,7 +926,7 @@ func (c *managerComponent) managerAllowTigeraNetworkPolicy() *v3.NetworkPolicy {
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
 			Tier:     networkpolicy.TigeraComponentTierName,
-			Selector: networkpolicy.KubernetesAppSelector(ManagerDeploymentName),
+			Selector: networkpolicy.KubernetesAppSelector(ManagerDeploymentName, VoltronName), // TODO(CASEY): Separate policies.
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Ingress:  ingressRules,
 			Egress:   egressRules,
