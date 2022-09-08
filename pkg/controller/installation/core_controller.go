@@ -150,7 +150,8 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, k8sClient, log, ri.tierWatchReady)
 
 		go utils.WaitToAddNetworkPolicyWatches(c, k8sClient, log, []types.NamespacedName{
-			{Name: kubecontrollers.KubeControllerNetworkPolicyName, Namespace: common.CalicoNamespace}},
+			{Name: kubecontrollers.KubeControllerNetworkPolicyName, Namespace: common.CalicoNamespace},
+		},
 		)
 	}
 
@@ -787,7 +788,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// Mark CR found so we can report converter problems via tigerastatus
 	r.status.OnCRFound()
-	//Set the meta info in the tigerastatus like observedGenerations
+	// Set the meta info in the tigerastatus like observedGenerations
 	defer r.status.SetMetaData(&instance.ObjectMeta)
 
 	// Changes for updating installation status conditions
@@ -1029,7 +1030,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 	var managerInternalTLSSecret certificatemanagement.KeyPairInterface
 	if instance.Spec.Variant == operator.TigeraSecureEnterprise && managementCluster != nil {
-		dnsNames := append(dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain), render.ManagerServiceIP)
+		// CASEY: Changed to use voltron service instead of Manager service. Requires that the certificate CN be adjusted.
+		dnsNames := append(dns.GetServiceDNSNames(render.VoltronName, render.ManagerNamespace, r.clusterDomain), render.ManagerServiceIP)
 		managerInternalTLSSecret, err = certificateManager.GetOrCreateKeyPair(r.client, render.ManagerInternalTLSSecretName, common.OperatorNamespace(), dnsNames)
 		if err != nil {
 			r.SetDegraded(operator.CertificateError, fmt.Sprintf("Error ensuring internal manager TLS certificate %q exists and has valid DNS names", render.ManagerInternalTLSSecretName), err, reqLogger)

@@ -433,6 +433,9 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		if c.cfg.Installation.CalicoNetwork != nil && c.cfg.Installation.CalicoNetwork.MultiInterfaceMode != nil {
 			env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value()})
 		}
+
+		// TODO: CASEY: We split out voltron.
+		env = append(env, corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: "https://tigera-voltron.tigera-manager.svc:9443"})
 	}
 
 	container := corev1.Container{

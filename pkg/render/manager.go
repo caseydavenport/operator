@@ -153,7 +153,7 @@ func (c *managerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	// TODO:
+	// TODO CASEY:
 	c.managerImage = "gcr.io/unique-caldron-775/casey/cnx-manager:latest"
 
 	c.proxyImage, err = components.GetReference(components.ComponentManagerProxy, reg, path, prefix, is)
@@ -165,6 +165,9 @@ func (c *managerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
+
+	// TODO CASEY: Modified image to point at new voltron location.
+	c.esProxyImage = "gcr.io/unique-caldron-775/casey/es-proxy:latest"
 
 	if len(errMsgs) != 0 {
 		return fmt.Errorf(strings.Join(errMsgs, ","))
@@ -547,6 +550,7 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 
 		// TODO
 		{Name: "LISTEN_ADDR", Value: "0.0.0.0:8443"},
+		{Name: "VOLTRON_URL", Value: "https://tigera-voltron.tigera-manager.svc:9443"},
 	}
 
 	volumeMounts := []corev1.VolumeMount{c.cfg.TrustedCertBundle.VolumeMount(c.SupportedOSType())}
