@@ -91,6 +91,11 @@ func (e *esGateway) ResolveImages(is *operatorv1.ImageSet) error {
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
+
+	// TODO: CASEY
+	// Use custom es-gateway image with tenant ID enforcement, etc.
+	// e.esGatewayImage = "gcr.io/unique-caldron-775/casey/es-gateway:latest"
+
 	if e.cfg.Installation.CertificateManagement != nil {
 		e.csrImage, err = certificatemanagement.ResolveCSRInitImage(e.cfg.Installation, is)
 		if err != nil {

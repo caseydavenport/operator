@@ -475,7 +475,6 @@ func (c *apiServerComponent) calicoCustomResourcesClusterRole() *rbacv1.ClusterR
 			},
 		},
 		{
-
 			// Kubernetes network policy resources.
 			APIGroups: []string{
 				"networking.k8s.io",

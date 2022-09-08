@@ -61,6 +61,7 @@ const (
 	ManagerTLSSecretName         = "manager-tls"
 	ManagerInternalTLSSecretName = "internal-manager-tls"
 	ManagerPolicyName            = networkpolicy.TigeraComponentPolicyPrefix + "manager-access"
+	VoltronPolicyName            = networkpolicy.TigeraComponentPolicyPrefix + "voltron-access"
 
 	ManagerClusterSettings            = "cluster-settings"
 	ManagerUserSettings               = "user-settings"
@@ -182,6 +183,7 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 		// - securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost"
 		CreateNamespace(ManagerNamespace, c.cfg.Installation.KubernetesProvider, PSSBaseline),
 		c.managerAllowTigeraNetworkPolicy(),
+		c.voltronNetworkPolicy(),
 		networkpolicy.AllowTigeraDefaultDeny(ManagerNamespace),
 	}
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ManagerNamespace, c.cfg.PullSecrets...)...)...)
@@ -835,9 +837,16 @@ func (c *managerComponent) managerPodSecurityPolicy() *policyv1beta1.PodSecurity
 	return psp
 }
 
-// Allow users to access Calico Enterprise Manager.
-func (c *managerComponent) managerAllowTigeraNetworkPolicy() *v3.NetworkPolicy {
+// NetworkPolicy to apply to Voltron. Voltron is run as its own service, and accepts connections
+// from outside of the cluster in the form of tunnel connects, as well as for access to the manager UI.
+// It needs to allow ingress from all sources, and access to the complete set of services it proxies to.
+func (c *managerComponent) voltronNetworkPolicy() *v3.NetworkPolicy {
 	egressRules := []v3.Rule{
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.CreateServiceSelectorEntityRule(ManagerNamespace, ManagerDeploymentName),
+		},
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
@@ -882,24 +891,24 @@ func (c *managerComponent) managerAllowTigeraNetworkPolicy() *v3.NetworkPolicy {
 			Action:   v3.Allow,
 			Protocol: &networkpolicy.TCPProtocol,
 			Source: v3.EntityRule{
-				// This policy allows access to Calico Enterprise Manager from anywhere
+				// This policy allows access to Voltron from anywhere
 				Nets: []string{"0.0.0.0/0"},
 			},
 			Destination: v3.EntityRule{
-				// By default, Calico Enterprise Manager is accessed over https
-				Ports: networkpolicy.Ports(managerTargetPort),
+				// By default, Calico Enterprise Voltron is accessed over https via voltron.
+				Ports: networkpolicy.Ports(defaultVoltronPort),
 			},
 		},
 		{
 			Action:   v3.Allow,
 			Protocol: &networkpolicy.TCPProtocol,
 			Source: v3.EntityRule{
-				// This policy allows access to Calico Enterprise Manager from anywhere
+				// This policy allows access to Calico Enterprise Voltron from anywhere
 				Nets: []string{"::/0"},
 			},
 			Destination: v3.EntityRule{
-				// By default, Calico Enterprise Manager is accessed over https
-				Ports: networkpolicy.Ports(managerTargetPort),
+				// By default, Calico Enterprise Voltron is accessed over https
+				Ports: networkpolicy.Ports(defaultVoltronPort),
 			},
 		},
 	}
@@ -920,13 +929,54 @@ func (c *managerComponent) managerAllowTigeraNetworkPolicy() *v3.NetworkPolicy {
 	return &v3.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
+			Name:      VoltronPolicyName,
+			Namespace: ManagerNamespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Order:    &networkpolicy.HighPrecedenceOrder,
+			Tier:     networkpolicy.TigeraComponentTierName,
+			Selector: networkpolicy.KubernetesAppSelector(VoltronName),
+			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
+			Ingress:  ingressRules,
+			Egress:   egressRules,
+		},
+	}
+}
+
+// Allow users to access Calico Enterprise Manager.
+func (c *managerComponent) managerAllowTigeraNetworkPolicy() *v3.NetworkPolicy {
+	// TODO(CASEY): Tighten this up.
+	egressRules := []v3.Rule{
+		{
+			Action: v3.Allow,
+		},
+	}
+
+	ingressRules := []v3.Rule{
+		{
+			// Allow from Voltron, and nothing else.
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Source: v3.EntityRule{Services: &v3.ServiceMatch{
+				Name:      VoltronName,
+				Namespace: ManagerNamespace,
+			}},
+			Destination: v3.EntityRule{
+				Ports: networkpolicy.Ports(managerTargetPort),
+			},
+		},
+	}
+
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      ManagerPolicyName,
 			Namespace: ManagerNamespace,
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
 			Tier:     networkpolicy.TigeraComponentTierName,
-			Selector: networkpolicy.KubernetesAppSelector(ManagerDeploymentName, VoltronName), // TODO(CASEY): Separate policies.
+			Selector: networkpolicy.KubernetesAppSelector(ManagerDeploymentName),
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Ingress:  ingressRules,
 			Egress:   egressRules,
