@@ -140,6 +140,10 @@ func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
 		}
+
+		// CASEY: TODO
+		c.apiServerImage = "gcr.io/unique-caldron-775/casey/apiserver:latest"
+
 		c.queryServerImage, err = components.GetReference(components.ComponentQueryServer, reg, path, prefix, is)
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
