@@ -62,6 +62,7 @@ const (
 	ManagerInternalTLSSecretName = "internal-manager-tls"
 	ManagerPolicyName            = networkpolicy.TigeraComponentPolicyPrefix + "manager-access"
 	VoltronPolicyName            = networkpolicy.TigeraComponentPolicyPrefix + "voltron-access"
+	KosmoPolicyName              = networkpolicy.TigeraComponentPolicyPrefix + "kosmo"
 
 	ManagerClusterSettings            = "cluster-settings"
 	ManagerUserSettings               = "user-settings"
@@ -80,6 +81,12 @@ const (
 	VoltronTunnelSecretName  = "tigera-management-cluster-connection"
 	defaultVoltronPort       = 9443
 	defaultTunnelVoltronPort = "9449"
+)
+
+// Kosmo constants
+const (
+	KosmoName = "tigera-kosmo"
+	kosmoPort = 9443
 )
 
 var (
@@ -137,9 +144,21 @@ type managerComponent struct {
 	cfg            *ManagerConfiguration
 	tlsSecrets     []*corev1.Secret
 	tlsAnnotations map[string]string
-	managerImage   string
-	proxyImage     string
-	esProxyImage   string
+
+	// Image for the manager UI container, which serves
+	// manager UI assets to the user's browser.
+	managerImage string
+
+	// Image for Voltron. Used in management clusters only to
+	// maintain HTTPS tunnels to managed clusters.
+	voltronImage string
+
+	// ES proxy image, used to serve requests from the UI to satisfy
+	// policy impact preview, flow log requests, etc.
+	esProxyImage string
+
+	// Kosmo - reverse proxy serving all inbound requests to the cluster.
+	kosmoImage string
 }
 
 func (c *managerComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -155,8 +174,9 @@ func (c *managerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 
 	// TODO CASEY:
 	c.managerImage = "gcr.io/unique-caldron-775/casey/cnx-manager:latest"
+	c.kosmoImage = "gcr.io/unique-caldron-775/casey/kosmo:latest"
 
-	c.proxyImage, err = components.GetReference(components.ComponentManagerProxy, reg, path, prefix, is)
+	c.voltronImage, err = components.GetReference(components.ComponentManagerProxy, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
@@ -186,7 +206,7 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 		// - securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost"
 		CreateNamespace(ManagerNamespace, c.cfg.Installation.KubernetesProvider, PSSBaseline),
 		c.managerAllowTigeraNetworkPolicy(),
-		c.voltronNetworkPolicy(),
+		c.kosmoNetworkPolicy(),
 		networkpolicy.AllowTigeraDefaultDeny(ManagerNamespace),
 	}
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ManagerNamespace, c.cfg.PullSecrets...)...)...)
@@ -211,13 +231,21 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, c.managerPodSecurityPolicy())
 	}
 
-	// Include a Voltron deployment and service as well.
+	// Manager deployment.
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ManagerNamespace, c.cfg.ESSecrets...)...)...)
 	objs = append(objs, c.managerDeployment())
 
-	// Include a Voltron deployment and service as well.
-	objs = append(objs, c.voltronDeployment())
-	objs = append(objs, c.voltronService())
+	// If this is a management cluster, then deploy Voltron to serve tunnels from managed clusters.
+	if c.cfg.ManagementCluster != nil {
+		// Include a Voltron deployment and service as well.
+		objs = append(objs, c.voltronNetworkPolicy())
+		objs = append(objs, c.voltronDeployment())
+		objs = append(objs, c.voltronService())
+	}
+
+	// Install Kosmo, the "ingress".
+	objs = append(objs, c.kosmoDeployment())
+	objs = append(objs, c.kosmoService())
 
 	if c.cfg.KeyValidatorConfig != nil {
 		objs = append(objs, configmap.ToRuntimeObjects(c.cfg.KeyValidatorConfig.RequiredConfigMaps(ManagerNamespace)...)...)
@@ -298,7 +326,7 @@ func (c *managerComponent) voltronDeployment() *appsv1.Deployment {
 			Tolerations:        c.managerTolerations(),
 			ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 			Containers: []corev1.Container{
-				c.managerProxyContainer(),
+				c.voltronContainer(),
 			},
 			Volumes: c.managerVolumes(),
 		},
@@ -312,6 +340,47 @@ func (c *managerComponent) voltronDeployment() *appsv1.Deployment {
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      VoltronName,
+			Namespace: ManagerNamespace,
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: c.cfg.Replicas,
+			Strategy: appsv1.DeploymentStrategy{
+				Type: appsv1.RecreateDeploymentStrategyType,
+			},
+			Template: *podTemplate,
+		},
+	}
+	return d
+}
+
+// TODO: kosmoDeployment creates a deployment for kosmo.
+func (c *managerComponent) kosmoDeployment() *appsv1.Deployment {
+	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        KosmoName,
+			Namespace:   ManagerNamespace,
+			Annotations: c.tlsAnnotations,
+		},
+		Spec: corev1.PodSpec{
+			NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
+			ServiceAccountName: ManagerServiceAccount,
+			Tolerations:        c.managerTolerations(),
+			ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
+			Containers: []corev1.Container{
+				c.kosmoContainer(),
+			},
+			Volumes: c.managerVolumes(),
+		},
+	}, c.cfg.ESClusterConfig, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
+
+	if c.cfg.Replicas != nil && *c.cfg.Replicas > 1 {
+		podTemplate.Spec.Affinity = podaffinity.NewPodAntiAffinity("tigera-manager", ManagerNamespace)
+	}
+
+	d := &appsv1.Deployment{
+		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      KosmoName,
 			Namespace: ManagerNamespace,
 		},
 		Spec: appsv1.DeploymentSpec{
@@ -464,8 +533,71 @@ func (c *managerComponent) managerOAuth2EnvVars() []corev1.EnvVar {
 	return envs
 }
 
-// managerProxyContainer returns the container for the manager proxy container.
-func (c *managerComponent) managerProxyContainer() corev1.Container {
+// kosmoContainer returns the container for the kosmo container.
+func (c *managerComponent) kosmoContainer() corev1.Container {
+	var keyPath, certPath, intKeyPath, intCertPath, tunnelKeyPath, tunnelCertPath string
+	if c.cfg.TLSKeyPair != nil {
+		keyPath, certPath = c.cfg.TLSKeyPair.VolumeMountKeyFilePath(), c.cfg.TLSKeyPair.VolumeMountCertificateFilePath()
+	}
+	if c.cfg.InternalTrafficSecret != nil {
+		intKeyPath, intCertPath = c.cfg.InternalTrafficSecret.VolumeMountKeyFilePath(), c.cfg.InternalTrafficSecret.VolumeMountCertificateFilePath()
+	}
+	if c.cfg.TunnelSecret != nil {
+		tunnelKeyPath, tunnelCertPath = c.cfg.TunnelSecret.VolumeMountKeyFilePath(), c.cfg.TunnelSecret.VolumeMountCertificateFilePath()
+	}
+	env := []corev1.EnvVar{
+		{Name: "KOSMO_PORT", Value: fmt.Sprintf("%d", kosmoPort)},
+		{Name: "KOSMO_COMPLIANCE_ENDPOINT", Value: fmt.Sprintf("https://compliance.%s.svc.%s", ComplianceNamespace, c.cfg.ClusterDomain)},
+		{Name: "KOSMO_LOGLEVEL", Value: "Debug"},
+		{Name: "KOSMO_KIBANA_ENDPOINT", Value: rkibana.HTTPSEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain)},
+		{Name: "KOSMO_KIBANA_BASE_PATH", Value: fmt.Sprintf("/%s/", KibanaBasePath)},
+		{Name: "KOSMO_KIBANA_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
+		{Name: "KOSMO_PACKET_CAPTURE_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
+		{Name: "KOSMO_PROMETHEUS_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
+		{Name: "KOSMO_COMPLIANCE_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
+		{Name: "KOSMO_DEX_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
+		{Name: "KOSMO_QUERYSERVER_ENDPOINT", Value: fmt.Sprintf("https://%s.%s.svc:%d", QueryserverServiceName, QueryserverNamespace, QueryServerPort)},
+		{Name: "KOSMO_QUERYSERVER_BASE_PATH", Value: fmt.Sprintf("/api/v1/namespaces/%s/services/https:%s:%d/proxy/", QueryserverNamespace, QueryserverServiceName, QueryServerPort)},
+		{Name: "KOSMO_QUERYSERVER_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
+		{Name: "KOSMO_HTTPS_KEY", Value: keyPath},
+		{Name: "KOSMO_HTTPS_CERT", Value: certPath},
+		{Name: "KOSMO_TUNNEL_KEY", Value: tunnelKeyPath},
+		{Name: "KOSMO_TUNNEL_CERT", Value: tunnelCertPath},
+		{Name: "KOSMO_INTERNAL_HTTPS_KEY", Value: intKeyPath},
+		{Name: "KOSMO_INTERNAL_HTTPS_CERT", Value: intCertPath},
+		{Name: "KOSMO_ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.cfg.ManagementCluster != nil)},
+		{Name: "KOSMO_DEFAULT_FORWARD_SERVER", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc:9200"},
+		{Name: "KOSMO_ENABLE_COMPLIANCE", Value: strconv.FormatBool(c.cfg.Compliance != nil && c.cfg.ComplianceLicenseActive)},
+		{Name: "KOSMO_FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
+
+		// NGINX_ENDPOINT is the location of the Manager UI. It's default config is to listen on localhost:8080. Since we're splitting, we
+		// need it to bind to an externally reachable address.
+		{Name: "KOSMO_NGINX_ENDPOINT", Value: fmt.Sprintf("http://tigera-manager.%s.svc.%s:8080", ManagerNamespace, c.cfg.ClusterDomain)},
+		{Name: "KOSMO_ELASTIC_ENDPOINT", Value: fmt.Sprintf("https://tigera-es-proxy.%s.svc.%s:8443", ManagerNamespace, c.cfg.ClusterDomain)},
+	}
+
+	if c.cfg.ManagementCluster != nil {
+		env = append(env, corev1.EnvVar{Name: "KOSMO_USE_HTTPS_CERT_ON_TUNNEL", Value: strconv.FormatBool(c.cfg.ManagementCluster.Spec.TLS != nil && c.cfg.ManagementCluster.Spec.TLS.SecretName == ManagerTLSSecretName)})
+	}
+
+	if c.cfg.KeyValidatorConfig != nil {
+		env = append(env, c.cfg.KeyValidatorConfig.RequiredEnv("KOSMO_")...)
+	}
+
+	return corev1.Container{
+		Name:         KosmoName,
+		Image:        c.kosmoImage,
+		Env:          env,
+		VolumeMounts: c.volumeMountsForProxyManager(),
+		// TODO: LivenessProbe: c.voltronProbe(),
+
+		// UID 1001 is used in the kosmo Dockerfile.
+		SecurityContext: securitycontext.NewBaseContext(1001, 0),
+	}
+}
+
+// voltronContainer returns the container for the voltron container.
+func (c *managerComponent) voltronContainer() corev1.Container {
 	var keyPath, certPath, intKeyPath, intCertPath, tunnelKeyPath, tunnelCertPath string
 	if c.cfg.TLSKeyPair != nil {
 		keyPath, certPath = c.cfg.TLSKeyPair.VolumeMountKeyFilePath(), c.cfg.TLSKeyPair.VolumeMountCertificateFilePath()
@@ -518,7 +650,7 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 
 	return corev1.Container{
 		Name:          VoltronName,
-		Image:         c.proxyImage,
+		Image:         c.voltronImage,
 		Env:           env,
 		VolumeMounts:  c.volumeMountsForProxyManager(),
 		LivenessProbe: c.voltronProbe(),
@@ -597,6 +729,30 @@ func (c *managerComponent) voltronService() *corev1.Service {
 			},
 			Selector: map[string]string{
 				"k8s-app": VoltronName,
+			},
+		},
+	}
+}
+
+// kosmoService returns the service exposing Kosmo, the entrypoint into the cluster.
+func (c *managerComponent) kosmoService() *corev1.Service {
+	return &corev1.Service{
+		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      KosmoName,
+			Namespace: ManagerNamespace,
+		},
+		Spec: corev1.ServiceSpec{
+			Ports: []corev1.ServicePort{
+				{
+					Port:       int32(kosmoPort),
+					Protocol:   corev1.ProtocolTCP,
+					TargetPort: intstr.FromInt(kosmoPort),
+					Name:       "https",
+				},
+			},
+			Selector: map[string]string{
+				"k8s-app": KosmoName,
 			},
 		},
 	}
@@ -841,6 +997,99 @@ func (c *managerComponent) managerPodSecurityPolicy() *policyv1beta1.PodSecurity
 	return psp
 }
 
+// NetworkPolicy to apply to Kosmo. Kosmo is run as its own service, and accepts connections
+// from outside of the cluster for access to the manager UI.
+// It needs to allow ingress from all sources, and access to the complete set of services it proxies to.
+func (c *managerComponent) kosmoNetworkPolicy() *v3.NetworkPolicy {
+	egressRules := []v3.Rule{
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.CreateServiceSelectorEntityRule(ManagerNamespace, ManagerDeploymentName),
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: TigeraAPIServerEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Source:      v3.EntityRule{},
+			Destination: networkpolicy.ESGatewayEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: ComplianceServerEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: DexEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: PacketCaptureEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
+		},
+	}
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, c.cfg.Openshift)
+	egressRules = append(egressRules, v3.Rule{
+		Action:      v3.Allow,
+		Protocol:    &networkpolicy.TCPProtocol,
+		Destination: networkpolicy.PrometheusEntityRule,
+	})
+
+	ingressRules := []v3.Rule{
+		{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Source: v3.EntityRule{
+				// This policy allows access to Kosmo from anywhere
+				Nets: []string{"0.0.0.0/0"},
+			},
+			Destination: v3.EntityRule{
+				// By default, Calico Enterprise Kosmo is accessed over https via Kosmo.
+				Ports: networkpolicy.Ports(kosmoPort),
+			},
+		},
+		{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Source: v3.EntityRule{
+				// This policy allows access to Calico Enterprise Kosmo from anywhere
+				Nets: []string{"::/0"},
+			},
+			Destination: v3.EntityRule{
+				// By default, Calico Enterprise Kosmo is accessed over https
+				Ports: networkpolicy.Ports(kosmoPort),
+			},
+		},
+	}
+
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      KosmoPolicyName,
+			Namespace: ManagerNamespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Order:    &networkpolicy.HighPrecedenceOrder,
+			Tier:     networkpolicy.TigeraComponentTierName,
+			Selector: networkpolicy.KubernetesAppSelector(KosmoName),
+			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
+			Ingress:  ingressRules,
+			Egress:   egressRules,
+		},
+	}
+}
+
 // NetworkPolicy to apply to Voltron. Voltron is run as its own service, and accepts connections
 // from outside of the cluster in the form of tunnel connects, as well as for access to the manager UI.
 // It needs to allow ingress from all sources, and access to the complete set of services it proxies to.
@@ -947,7 +1196,8 @@ func (c *managerComponent) voltronNetworkPolicy() *v3.NetworkPolicy {
 	}
 }
 
-// Allow users to access Calico Enterprise Manager.
+// Allow users to access Calico Enterprise Manager pod, which contains
+// the manager UI nginx and es-proxy. All access to these containers comes via Kosmo.
 func (c *managerComponent) managerAllowTigeraNetworkPolicy() *v3.NetworkPolicy {
 	// TODO(CASEY): Tighten this up.
 	egressRules := []v3.Rule{
@@ -958,11 +1208,11 @@ func (c *managerComponent) managerAllowTigeraNetworkPolicy() *v3.NetworkPolicy {
 
 	ingressRules := []v3.Rule{
 		{
-			// Allow from Voltron, and nothing else.
+			// Allow from Kosmo, and nothing else.
 			Action:   v3.Allow,
 			Protocol: &networkpolicy.TCPProtocol,
 			Source: v3.EntityRule{Services: &v3.ServiceMatch{
-				Name:      VoltronName,
+				Name:      KosmoName,
 				Namespace: ManagerNamespace,
 			}},
 			Destination: v3.EntityRule{
