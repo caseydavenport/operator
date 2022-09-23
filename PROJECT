@@ -1,11 +1,23 @@
 domain: tigera.io
-layout: go.kubebuilder.io/v2
+layout:
+- go.kubebuilder.io/v2
+plugins:
+  go.sdk.operatorframework.io/v2-alpha: {}
 projectName: operator
 repo: github.com/tigera/operator
 resources:
-- group: operator
+- domain: tigera.io
+  group: operator
   kind: Installation
+  path: github.com/tigera/operator/api/v1
   version: v1
-version: 3-alpha
-plugins:
-  go.sdk.operatorframework.io/v2-alpha: {}
+- api:
+    crdVersion: v1beta1
+    namespaced: true
+  controller: true
+  domain: tigera.io
+  group: operator
+  kind: Tenant
+  path: github.com/tigera/operator/api/v1
+  version: v1
+version: "3"
