@@ -49,6 +49,8 @@ const (
 
 	auditLogsVolumeName   = "tigera-audit-logs"
 	auditPolicyVolumeName = "tigera-audit-policy"
+
+	VoltronTunnelSecretName = "tigera-management-cluster-connection"
 )
 
 const (

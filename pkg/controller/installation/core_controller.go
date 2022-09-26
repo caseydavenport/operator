@@ -80,6 +80,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/resourcequota"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"github.com/tigera/operator/pkg/render/monitor"
+	"github.com/tigera/operator/pkg/render/tenant"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -1032,7 +1033,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	var managerInternalTLSSecret certificatemanagement.KeyPairInterface
 	if instance.Spec.Variant == operator.TigeraSecureEnterprise && managementCluster != nil {
 		// CASEY: Changed to use voltron service instead of Manager service. Requires that the certificate CN be adjusted.
-		dnsNames := append(dns.GetServiceDNSNames(render.VoltronName, render.ManagerNamespace, r.clusterDomain), render.ManagerServiceIP)
+		// TODO: Multi-ns voltron requires something a little funky here.
+		dnsNames := append(dns.GetServiceDNSNames(tenant.VoltronName, render.ManagerNamespace, r.clusterDomain), render.ManagerServiceIP)
 		managerInternalTLSSecret, err = certificateManager.GetOrCreateKeyPair(r.client, render.ManagerInternalTLSSecretName, common.OperatorNamespace(), dnsNames)
 		if err != nil {
 			r.SetDegraded(operator.CertificateError, fmt.Sprintf("Error ensuring internal manager TLS certificate %q exists and has valid DNS names", render.ManagerInternalTLSSecretName), err, reqLogger)

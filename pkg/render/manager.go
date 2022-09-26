@@ -61,7 +61,6 @@ const (
 	ManagerTLSSecretName         = "manager-tls"
 	ManagerInternalTLSSecretName = "internal-manager-tls"
 	ManagerPolicyName            = networkpolicy.TigeraComponentPolicyPrefix + "manager-access"
-	VoltronPolicyName            = networkpolicy.TigeraComponentPolicyPrefix + "voltron-access"
 	KosmoPolicyName              = networkpolicy.TigeraComponentPolicyPrefix + "kosmo"
 
 	ManagerClusterSettings            = "cluster-settings"
@@ -73,14 +72,6 @@ const (
 	TlsSecretHashAnnotation         = "hash.operator.tigera.io/tls-secret"
 	KibanaTLSHashAnnotation         = "hash.operator.tigera.io/kibana-secrets"
 	ElasticsearchUserHashAnnotation = "hash.operator.tigera.io/elasticsearch-user"
-)
-
-// ManagementClusterConnection configuration constants
-const (
-	VoltronName              = "tigera-voltron"
-	VoltronTunnelSecretName  = "tigera-management-cluster-connection"
-	defaultVoltronPort       = 9443
-	defaultTunnelVoltronPort = "9449"
 )
 
 // Kosmo constants
@@ -149,10 +140,6 @@ type managerComponent struct {
 	// manager UI assets to the user's browser.
 	managerImage string
 
-	// Image for Voltron. Used in management clusters only to
-	// maintain HTTPS tunnels to managed clusters.
-	voltronImage string
-
 	// ES proxy image, used to serve requests from the UI to satisfy
 	// policy impact preview, flow log requests, etc.
 	esProxyImage string
@@ -175,11 +162,6 @@ func (c *managerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	// TODO CASEY:
 	c.managerImage = "gcr.io/unique-caldron-775/casey/cnx-manager:latest"
 	c.kosmoImage = "gcr.io/unique-caldron-775/casey/kosmo:latest"
-
-	c.voltronImage, err = components.GetReference(components.ComponentManagerProxy, reg, path, prefix, is)
-	if err != nil {
-		errMsgs = append(errMsgs, err.Error())
-	}
 
 	c.esProxyImage, err = components.GetReference(components.ComponentEsProxy, reg, path, prefix, is)
 	if err != nil {
@@ -234,14 +216,6 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 	// Manager deployment.
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ManagerNamespace, c.cfg.ESSecrets...)...)...)
 	objs = append(objs, c.managerDeployment())
-
-	// If this is a management cluster, then deploy Voltron to serve tunnels from managed clusters.
-	if c.cfg.ManagementCluster != nil {
-		// Include a Voltron deployment and service as well.
-		objs = append(objs, c.voltronNetworkPolicy())
-		objs = append(objs, c.voltronDeployment())
-		objs = append(objs, c.voltronService())
-	}
 
 	// Install Kosmo, the "ingress".
 	objs = append(objs, c.kosmoDeployment())
@@ -303,49 +277,6 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 				RollingUpdate: &appsv1.RollingUpdateDeployment{
 					MaxSurge: &surge,
 				},
-			},
-			Template: *podTemplate,
-		},
-	}
-	return d
-}
-
-// voltronDeployment creates a deployment for voltron.
-// TODO: Split voltron into separate component.
-// TODO: Use a separate service account.
-func (c *managerComponent) voltronDeployment() *appsv1.Deployment {
-	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        VoltronName,
-			Namespace:   ManagerNamespace,
-			Annotations: c.tlsAnnotations,
-		},
-		Spec: corev1.PodSpec{
-			NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
-			ServiceAccountName: ManagerServiceAccount,
-			Tolerations:        c.managerTolerations(),
-			ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
-			Containers: []corev1.Container{
-				c.voltronContainer(),
-			},
-			Volumes: c.managerVolumes(),
-		},
-	}, c.cfg.ESClusterConfig, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
-
-	if c.cfg.Replicas != nil && *c.cfg.Replicas > 1 {
-		podTemplate.Spec.Affinity = podaffinity.NewPodAntiAffinity("tigera-manager", ManagerNamespace)
-	}
-
-	d := &appsv1.Deployment{
-		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      VoltronName,
-			Namespace: ManagerNamespace,
-		},
-		Spec: appsv1.DeploymentSpec{
-			Replicas: c.cfg.Replicas,
-			Strategy: appsv1.DeploymentStrategy{
-				Type: appsv1.RecreateDeploymentStrategyType,
 			},
 			Template: *podTemplate,
 		},
@@ -445,21 +376,6 @@ func (c *managerComponent) managerEsProxyProbe() *corev1.Probe {
 			HTTPGet: &corev1.HTTPGetAction{
 				Path:   "/version",           // CASEY: Used to go via Voltron, which would strip this path.
 				Port:   intstr.FromInt(8443), // TODO(CASEY)
-				Scheme: corev1.URISchemeHTTPS,
-			},
-		},
-		InitialDelaySeconds: 90,
-		PeriodSeconds:       10,
-	}
-}
-
-// voltronProbe returns the probe for the proxy container.
-func (c *managerComponent) voltronProbe() *corev1.Probe {
-	return &corev1.Probe{
-		ProbeHandler: corev1.ProbeHandler{
-			HTTPGet: &corev1.HTTPGetAction{
-				Path:   "/voltron/api/health",
-				Port:   intstr.FromInt(managerPort),
 				Scheme: corev1.URISchemeHTTPS,
 			},
 		},
@@ -596,69 +512,6 @@ func (c *managerComponent) kosmoContainer() corev1.Container {
 	}
 }
 
-// voltronContainer returns the container for the voltron container.
-func (c *managerComponent) voltronContainer() corev1.Container {
-	var keyPath, certPath, intKeyPath, intCertPath, tunnelKeyPath, tunnelCertPath string
-	if c.cfg.TLSKeyPair != nil {
-		keyPath, certPath = c.cfg.TLSKeyPair.VolumeMountKeyFilePath(), c.cfg.TLSKeyPair.VolumeMountCertificateFilePath()
-	}
-	if c.cfg.InternalTrafficSecret != nil {
-		intKeyPath, intCertPath = c.cfg.InternalTrafficSecret.VolumeMountKeyFilePath(), c.cfg.InternalTrafficSecret.VolumeMountCertificateFilePath()
-	}
-	if c.cfg.TunnelSecret != nil {
-		tunnelKeyPath, tunnelCertPath = c.cfg.TunnelSecret.VolumeMountKeyFilePath(), c.cfg.TunnelSecret.VolumeMountCertificateFilePath()
-	}
-	env := []corev1.EnvVar{
-		{Name: "VOLTRON_PORT", Value: fmt.Sprintf("%d", defaultVoltronPort)},
-		{Name: "VOLTRON_COMPLIANCE_ENDPOINT", Value: fmt.Sprintf("https://compliance.%s.svc.%s", ComplianceNamespace, c.cfg.ClusterDomain)},
-		{Name: "VOLTRON_LOGLEVEL", Value: "Debug"},
-		{Name: "VOLTRON_KIBANA_ENDPOINT", Value: rkibana.HTTPSEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain)},
-		{Name: "VOLTRON_KIBANA_BASE_PATH", Value: fmt.Sprintf("/%s/", KibanaBasePath)},
-		{Name: "VOLTRON_KIBANA_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
-		{Name: "VOLTRON_PACKET_CAPTURE_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
-		{Name: "VOLTRON_PROMETHEUS_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
-		{Name: "VOLTRON_COMPLIANCE_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
-		{Name: "VOLTRON_DEX_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
-		{Name: "VOLTRON_QUERYSERVER_ENDPOINT", Value: fmt.Sprintf("https://%s.%s.svc:%d", QueryserverServiceName, QueryserverNamespace, QueryServerPort)},
-		{Name: "VOLTRON_QUERYSERVER_BASE_PATH", Value: fmt.Sprintf("/api/v1/namespaces/%s/services/https:%s:%d/proxy/", QueryserverNamespace, QueryserverServiceName, QueryServerPort)},
-		{Name: "VOLTRON_QUERYSERVER_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
-		{Name: "VOLTRON_HTTPS_KEY", Value: keyPath},
-		{Name: "VOLTRON_HTTPS_CERT", Value: certPath},
-		{Name: "VOLTRON_TUNNEL_KEY", Value: tunnelKeyPath},
-		{Name: "VOLTRON_TUNNEL_CERT", Value: tunnelCertPath},
-		{Name: "VOLTRON_INTERNAL_HTTPS_KEY", Value: intKeyPath},
-		{Name: "VOLTRON_INTERNAL_HTTPS_CERT", Value: intCertPath},
-		{Name: "VOLTRON_ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.cfg.ManagementCluster != nil)},
-		{Name: "VOLTRON_TUNNEL_PORT", Value: defaultTunnelVoltronPort},
-		{Name: "VOLTRON_DEFAULT_FORWARD_SERVER", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc:9200"},
-		{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: strconv.FormatBool(c.cfg.Compliance != nil && c.cfg.ComplianceLicenseActive)},
-		{Name: "VOLTRON_FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
-
-		// NGINX_ENDPOINT is the location of the Manager UI. It's default config is to listen on localhost:8080. Since we're splitting, we
-		// need it to bind to an externally reachable address.
-		{Name: "VOLTRON_NGINX_ENDPOINT", Value: fmt.Sprintf("http://tigera-manager.%s.svc.%s:8080", ManagerNamespace, c.cfg.ClusterDomain)},
-		{Name: "VOLTRON_ELASTIC_ENDPOINT", Value: fmt.Sprintf("https://tigera-es-proxy.%s.svc.%s:8443", ManagerNamespace, c.cfg.ClusterDomain)},
-	}
-
-	if c.cfg.ManagementCluster != nil {
-		env = append(env, corev1.EnvVar{Name: "VOLTRON_USE_HTTPS_CERT_ON_TUNNEL", Value: strconv.FormatBool(c.cfg.ManagementCluster.Spec.TLS != nil && c.cfg.ManagementCluster.Spec.TLS.SecretName == ManagerTLSSecretName)})
-	}
-
-	if c.cfg.KeyValidatorConfig != nil {
-		env = append(env, c.cfg.KeyValidatorConfig.RequiredEnv("VOLTRON_")...)
-	}
-
-	return corev1.Container{
-		Name:          VoltronName,
-		Image:         c.voltronImage,
-		Env:           env,
-		VolumeMounts:  c.volumeMountsForProxyManager(),
-		LivenessProbe: c.voltronProbe(),
-		// UID 1001 is used in the voltron Dockerfile.
-		SecurityContext: securitycontext.NewBaseContext(1001, 0),
-	}
-}
-
 func (c *managerComponent) volumeMountsForProxyManager() []corev1.VolumeMount {
 	mounts := []corev1.VolumeMount{
 		{Name: ManagerTLSSecretName, MountPath: "/manager-tls", ReadOnly: true},
@@ -708,30 +561,6 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 // managerTolerations returns the tolerations for the Tigera Secure manager deployment pods.
 func (c *managerComponent) managerTolerations() []corev1.Toleration {
 	return append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateCriticalAddonsAndControlPlane...)
-}
-
-// voltronService returns the service exposing the Tigera Secure web app.
-func (c *managerComponent) voltronService() *corev1.Service {
-	return &corev1.Service{
-		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      VoltronName,
-			Namespace: ManagerNamespace,
-		},
-		Spec: corev1.ServiceSpec{
-			Ports: []corev1.ServicePort{
-				{
-					Port:       int32(defaultVoltronPort),
-					Protocol:   corev1.ProtocolTCP,
-					TargetPort: intstr.FromInt(defaultVoltronPort),
-					Name:       "https",
-				},
-			},
-			Selector: map[string]string{
-				"k8s-app": VoltronName,
-			},
-		},
-	}
 }
 
 // kosmoService returns the service exposing Kosmo, the entrypoint into the cluster.
@@ -1083,112 +912,6 @@ func (c *managerComponent) kosmoNetworkPolicy() *v3.NetworkPolicy {
 			Order:    &networkpolicy.HighPrecedenceOrder,
 			Tier:     networkpolicy.TigeraComponentTierName,
 			Selector: networkpolicy.KubernetesAppSelector(KosmoName),
-			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
-			Ingress:  ingressRules,
-			Egress:   egressRules,
-		},
-	}
-}
-
-// NetworkPolicy to apply to Voltron. Voltron is run as its own service, and accepts connections
-// from outside of the cluster in the form of tunnel connects, as well as for access to the manager UI.
-// It needs to allow ingress from all sources, and access to the complete set of services it proxies to.
-func (c *managerComponent) voltronNetworkPolicy() *v3.NetworkPolicy {
-	egressRules := []v3.Rule{
-		{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.CreateServiceSelectorEntityRule(ManagerNamespace, ManagerDeploymentName),
-		},
-		{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: TigeraAPIServerEntityRule,
-		},
-		{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      v3.EntityRule{},
-			Destination: networkpolicy.ESGatewayEntityRule,
-		},
-		{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: ComplianceServerEntityRule,
-		},
-		{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: DexEntityRule,
-		},
-		{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: PacketCaptureEntityRule,
-		},
-		{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
-		},
-	}
-	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, c.cfg.Openshift)
-	egressRules = append(egressRules, v3.Rule{
-		Action:      v3.Allow,
-		Protocol:    &networkpolicy.TCPProtocol,
-		Destination: networkpolicy.PrometheusEntityRule,
-	})
-
-	ingressRules := []v3.Rule{
-		{
-			Action:   v3.Allow,
-			Protocol: &networkpolicy.TCPProtocol,
-			Source: v3.EntityRule{
-				// This policy allows access to Voltron from anywhere
-				Nets: []string{"0.0.0.0/0"},
-			},
-			Destination: v3.EntityRule{
-				// By default, Calico Enterprise Voltron is accessed over https via voltron.
-				Ports: networkpolicy.Ports(defaultVoltronPort),
-			},
-		},
-		{
-			Action:   v3.Allow,
-			Protocol: &networkpolicy.TCPProtocol,
-			Source: v3.EntityRule{
-				// This policy allows access to Calico Enterprise Voltron from anywhere
-				Nets: []string{"::/0"},
-			},
-			Destination: v3.EntityRule{
-				// By default, Calico Enterprise Voltron is accessed over https
-				Ports: networkpolicy.Ports(defaultVoltronPort),
-			},
-		},
-	}
-
-	voltronTunnelPort, err := strconv.ParseUint(defaultTunnelVoltronPort, 10, 16)
-	if err == nil {
-		ingressRules = append(ingressRules, v3.Rule{
-			Action:   v3.Allow,
-			Protocol: &networkpolicy.TCPProtocol,
-			Source:   v3.EntityRule{},
-			Destination: v3.EntityRule{
-				// This policy is used for multi-cluster management to establish a tunnel from another cluster.
-				Ports: networkpolicy.Ports(uint16(voltronTunnelPort)),
-			},
-		})
-	}
-
-	return &v3.NetworkPolicy{
-		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      VoltronPolicyName,
-			Namespace: ManagerNamespace,
-		},
-		Spec: v3.NetworkPolicySpec{
-			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.TigeraComponentTierName,
-			Selector: networkpolicy.KubernetesAppSelector(VoltronName),
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Ingress:  ingressRules,
 			Egress:   egressRules,
