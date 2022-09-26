@@ -115,6 +115,14 @@ func AddToManager(mgr ctrl.Manager, options options.AddOptions) error {
 	}).SetupWithManager(mgr, options); err != nil {
 		return fmt.Errorf("failed to create controller %s: %v", "Tiers", err)
 	}
+	if err := (&TenantReconciler{
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("Tenants"),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr, options); err != nil {
+		return fmt.Errorf("failed to create controller %s: %v", "Tenant", err)
+	}
+
 	// +kubebuilder:scaffold:builder
 	return nil
 }
