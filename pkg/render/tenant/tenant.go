@@ -51,10 +51,10 @@ const (
 
 	ElasticsearchManagerUserSecret = "tigera-ee-manager-elasticsearch-access"
 
-	VoltronName              = "tigera-voltron"
-	VoltronTunnelSecretName  = "tigera-management-cluster-connection"
-	defaultVoltronPort       = 9443
-	defaultTunnelVoltronPort = "9449"
+	VoltronName             = "tigera-voltron"
+	VoltronTunnelSecretName = "tigera-management-cluster-connection"
+	defaultVoltronPort      = 9443
+	tunnelPort              = 9449
 )
 
 var (
@@ -73,11 +73,9 @@ func Tenant(cfg *Configuration) (render.Component, error) {
 			tlsAnnotations[key] = value
 		}
 	}
+	tlsAnnotations[cfg.InternalTrafficSecret.HashAnnotationKey()] = cfg.InternalTrafficSecret.HashAnnotationValue()
+	tlsAnnotations[cfg.TunnelSecret.HashAnnotationKey()] = cfg.InternalTrafficSecret.HashAnnotationValue()
 
-	if cfg.ManagementCluster != nil {
-		tlsAnnotations[cfg.InternalTrafficSecret.HashAnnotationKey()] = cfg.InternalTrafficSecret.HashAnnotationValue()
-		tlsAnnotations[cfg.TunnelSecret.HashAnnotationKey()] = cfg.InternalTrafficSecret.HashAnnotationValue()
-	}
 	return &component{
 		cfg:            cfg,
 		tlsSecrets:     tlsSecrets,
@@ -170,7 +168,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 	objs = append(objs, c.voltronNetworkPolicy(ns.Name))
 	objs = append(objs, voltronServiceAccount(ns.Name))
 	objs = append(objs, voltronClusterRole(c.cfg.Openshift))
-	objs = append(objs, clusterRoleBinding(ns.Name))
+	objs = append(objs, roleBinding(ns.Name))
 	objs = append(objs, c.voltronDeployment(ns.Name))
 	objs = append(objs, c.voltronService(ns.Name))
 
@@ -231,12 +229,10 @@ func (c *component) voltronVolumes() []corev1.Volume {
 		c.cfg.TLSKeyPair.Volume(),
 		c.cfg.TrustedCertBundle.Volume(),
 	}
-	if c.cfg.ManagementCluster != nil {
-		v = append(v,
-			c.cfg.InternalTrafficSecret.Volume(),
-			c.cfg.TunnelSecret.Volume(),
-		)
-	}
+	v = append(v,
+		c.cfg.InternalTrafficSecret.Volume(),
+		c.cfg.TunnelSecret.Volume(),
+	)
 	if c.cfg.KeyValidatorConfig != nil {
 		v = append(v, c.cfg.KeyValidatorConfig.RequiredVolumes()...)
 	}
@@ -272,12 +268,16 @@ func (c *component) voltronContainer(ns string) corev1.Container {
 		tunnelKeyPath, tunnelCertPath = c.cfg.TunnelSecret.VolumeMountKeyFilePath(), c.cfg.TunnelSecret.VolumeMountCertificateFilePath()
 	}
 	env := []corev1.EnvVar{
+		{Name: "VOLTRON_TENANT", Value: c.cfg.Tenant.Name},
+
 		{Name: "VOLTRON_PORT", Value: fmt.Sprintf("%d", defaultVoltronPort)},
 		{Name: "VOLTRON_COMPLIANCE_ENDPOINT", Value: fmt.Sprintf("https://compliance.%s.svc.%s", render.ComplianceNamespace, c.cfg.ClusterDomain)},
 		{Name: "VOLTRON_LOGLEVEL", Value: "Debug"},
+
 		{Name: "VOLTRON_KIBANA_ENDPOINT", Value: rkibana.HTTPSEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain)},
 		{Name: "VOLTRON_KIBANA_BASE_PATH", Value: fmt.Sprintf("/%s/", render.KibanaBasePath)},
 		{Name: "VOLTRON_KIBANA_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
+
 		{Name: "VOLTRON_PACKET_CAPTURE_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 		{Name: "VOLTRON_PROMETHEUS_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 		{Name: "VOLTRON_COMPLIANCE_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
@@ -291,8 +291,8 @@ func (c *component) voltronContainer(ns string) corev1.Container {
 		{Name: "VOLTRON_TUNNEL_CERT", Value: tunnelCertPath},
 		{Name: "VOLTRON_INTERNAL_HTTPS_KEY", Value: intKeyPath},
 		{Name: "VOLTRON_INTERNAL_HTTPS_CERT", Value: intCertPath},
-		{Name: "VOLTRON_ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.cfg.ManagementCluster != nil)},
-		{Name: "VOLTRON_TUNNEL_PORT", Value: defaultTunnelVoltronPort},
+		{Name: "VOLTRON_ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: "true"},
+		{Name: "VOLTRON_TUNNEL_PORT", Value: fmt.Sprintf("%d", tunnelPort)},
 		{Name: "VOLTRON_DEFAULT_FORWARD_SERVER", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc:9200"},
 		{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: strconv.FormatBool(c.cfg.Compliance != nil && c.cfg.ComplianceLicenseActive)},
 		{Name: "VOLTRON_FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
@@ -312,10 +312,11 @@ func (c *component) voltronContainer(ns string) corev1.Container {
 	}
 
 	return corev1.Container{
-		Name:         VoltronName,
-		Image:        c.voltronImage,
-		Env:          env,
-		VolumeMounts: c.volumeMountsForVoltron(),
+		Name:            VoltronName,
+		Image:           c.voltronImage,
+		ImagePullPolicy: corev1.PullAlways,
+		Env:             env,
+		VolumeMounts:    c.volumeMountsForVoltron(),
 		// LivenessProbe: c.voltronProbe(),
 		// UID 1001 is used in the voltron Dockerfile.
 		SecurityContext: securitycontext.NewBaseContext(1001, 0),
@@ -324,6 +325,7 @@ func (c *component) voltronContainer(ns string) corev1.Container {
 
 func (c *component) volumeMountsForVoltron() []corev1.VolumeMount {
 	mounts := []corev1.VolumeMount{
+		{Name: render.ManagerTLSSecretName, MountPath: "/manager-tls", ReadOnly: true},
 		c.cfg.TrustedCertBundle.VolumeMount(c.SupportedOSType()),
 	}
 
@@ -352,6 +354,12 @@ func (c *component) voltronService(ns string) *corev1.Service {
 					Protocol:   corev1.ProtocolTCP,
 					TargetPort: intstr.FromInt(defaultVoltronPort),
 					Name:       "https",
+				},
+				{
+					Port:       int32(tunnelPort),
+					Protocol:   corev1.ProtocolTCP,
+					TargetPort: intstr.FromInt(tunnelPort),
+					Name:       "tunnel",
 				},
 			},
 			Selector: map[string]string{
@@ -386,70 +394,6 @@ func voltronClusterRole(openshift bool) *rbacv1.ClusterRole {
 				Resources: []string{"tokenreviews"},
 				Verbs:     []string{"create"},
 			},
-
-			{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{
-					"networksets",
-					"globalnetworksets",
-					"globalnetworkpolicies",
-					"tier.globalnetworkpolicies",
-					"networkpolicies",
-					"tier.networkpolicies",
-					"stagedglobalnetworkpolicies",
-					"tier.stagedglobalnetworkpolicies",
-					"stagednetworkpolicies",
-					"tier.stagednetworkpolicies",
-					"stagedkubernetesnetworkpolicies",
-				},
-				Verbs: []string{"list"},
-			},
-			{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{
-					"tiers",
-				},
-				Verbs: []string{"get", "list"},
-			},
-			{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{
-					"hostendpoints",
-				},
-				Verbs: []string{"list"},
-			},
-			{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{
-					"felixconfigurations",
-				},
-				ResourceNames: []string{
-					"default",
-				},
-				Verbs: []string{"get"},
-			},
-			{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{
-					"alertexceptions",
-				},
-				Verbs: []string{"get", "list", "update"},
-			},
-			{
-				APIGroups: []string{"networking.k8s.io"},
-				Resources: []string{"networkpolicies"},
-				Verbs:     []string{"get", "list"},
-			},
-			{
-				APIGroups: []string{""},
-				Resources: []string{"serviceaccounts", "namespaces", "nodes", "events", "services", "pods"},
-				Verbs:     []string{"list"},
-			},
-			{
-				APIGroups: []string{"apps"},
-				Resources: []string{"replicasets", "statefulsets", "daemonsets"},
-				Verbs:     []string{"list"},
-			},
 			// When a request is made in the manager UI, they are proxied through the Voltron backend server. If the
 			// request is targeting a k8s api or when it is targeting a managed cluster, Voltron will authenticate the
 			// user based on the auth header and then impersonate the user.
@@ -457,6 +401,13 @@ func voltronClusterRole(openshift bool) *rbacv1.ClusterRole {
 				APIGroups: []string{""},
 				Resources: []string{"users", "groups", "serviceaccounts"},
 				Verbs:     []string{"impersonate"},
+			},
+
+			// For listing managed clusters. TODO: Should be a namespaced resource.
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"managedclusters"},
+				Verbs:     []string{"list", "get", "watch", "update"},
 			},
 		},
 	}
@@ -468,7 +419,7 @@ func voltronClusterRole(openshift bool) *rbacv1.ClusterRole {
 				APIGroups:     []string{"policy"},
 				Resources:     []string{"podsecuritypolicies"},
 				Verbs:         []string{"use"},
-				ResourceNames: []string{"tigera-manager"},
+				ResourceNames: []string{"tigera-voltron"},
 			},
 		)
 	}
@@ -476,10 +427,10 @@ func voltronClusterRole(openshift bool) *rbacv1.ClusterRole {
 	return cr
 }
 
-func clusterRoleBinding(ns string) *rbacv1.ClusterRoleBinding {
-	return &rbacv1.ClusterRoleBinding{
-		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: VoltronName},
+func roleBinding(ns string) *rbacv1.RoleBinding {
+	return &rbacv1.RoleBinding{
+		TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: VoltronName, Namespace: ns},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
@@ -608,18 +559,15 @@ func (c *component) voltronNetworkPolicy(ns string) *v3.NetworkPolicy {
 		},
 	}
 
-	voltronTunnelPort, err := strconv.ParseUint(defaultTunnelVoltronPort, 10, 16)
-	if err == nil {
-		ingressRules = append(ingressRules, v3.Rule{
-			Action:   v3.Allow,
-			Protocol: &networkpolicy.TCPProtocol,
-			Source:   v3.EntityRule{},
-			Destination: v3.EntityRule{
-				// This policy is used for multi-cluster management to establish a tunnel from another cluster.
-				Ports: networkpolicy.Ports(uint16(voltronTunnelPort)),
-			},
-		})
-	}
+	ingressRules = append(ingressRules, v3.Rule{
+		Action:   v3.Allow,
+		Protocol: &networkpolicy.TCPProtocol,
+		Source:   v3.EntityRule{},
+		Destination: v3.EntityRule{
+			// This policy is used for multi-cluster management to establish a tunnel from another cluster.
+			Ports: networkpolicy.Ports(uint16(tunnelPort)),
+		},
+	})
 
 	return &v3.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},

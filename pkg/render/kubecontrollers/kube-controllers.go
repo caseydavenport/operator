@@ -435,7 +435,7 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		}
 
 		// TODO: CASEY: We split out voltron.
-		env = append(env, corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: "https://tigera-voltron.tigera-manager.svc:9443"})
+		env = append(env, corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: "https://tigera-kosmo.tigera-manager.svc:9443"})
 	}
 
 	container := corev1.Container{

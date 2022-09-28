@@ -296,15 +296,36 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	svcDNSNames := append(dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain), "localhost")
-	tlsSecret, err := certificateManager.GetOrCreateKeyPair(
-		r.client,
-		render.ManagerTLSSecretName,
-		common.OperatorNamespace(),
-		svcDNSNames)
+	managementCluster, err := utils.GetManagementCluster(ctx, r.client)
 	if err != nil {
-		r.status.SetDegraded("Error getting or creating manager TLS certificate", err.Error())
+		log.Error(err, "Error reading ManagementCluster")
+		r.status.SetDegraded("Error reading ManagementCluster", err.Error())
 		return reconcile.Result{}, err
+	}
+
+	var tlsSecret certificatemanagement.KeyPairInterface
+	if managementCluster == nil {
+		// If we're a management cluster, this is handled by the tenant controller.
+		// TODO: This is a hack and is just to make this prototype easier.
+		svcDNSNames := append(dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain), "localhost")
+		tlsSecret, err = certificateManager.GetOrCreateKeyPair(
+			r.client,
+			render.ManagerTLSSecretName,
+			common.OperatorNamespace(),
+			svcDNSNames)
+		if err != nil {
+			r.status.SetDegraded("Error getting or creating manager TLS certificate", err.Error())
+			return reconcile.Result{}, err
+		}
+	} else {
+		tlsSecret, err = certificateManager.GetKeyPair(
+			r.client,
+			render.ManagerTLSSecretName,
+			common.OperatorNamespace())
+		if err != nil {
+			r.status.SetDegraded("Error getting manager TLS certificate", err.Error())
+			return reconcile.Result{}, err
+		}
 	}
 
 	trustedSecretNames := []string{render.PacketCaptureCertSecret, monitor.PrometheusTLSSecretName, relasticsearch.PublicCertSecret}
@@ -391,13 +412,6 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 			return reconcile.Result{}, nil
 		}
 		r.status.SetDegraded("Failed to get Elasticsearch credentials", err.Error())
-		return reconcile.Result{}, err
-	}
-
-	managementCluster, err := utils.GetManagementCluster(ctx, r.client)
-	if err != nil {
-		log.Error(err, "Error reading ManagementCluster")
-		r.status.SetDegraded("Error reading ManagementCluster", err.Error())
 		return reconcile.Result{}, err
 	}
 

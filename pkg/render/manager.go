@@ -23,6 +23,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -501,10 +502,11 @@ func (c *managerComponent) kosmoContainer() corev1.Container {
 	}
 
 	return corev1.Container{
-		Name:         KosmoName,
-		Image:        c.kosmoImage,
-		Env:          env,
-		VolumeMounts: c.volumeMountsForProxyManager(),
+		Name:            KosmoName,
+		Image:           c.kosmoImage,
+		ImagePullPolicy: v1.PullAlways,
+		Env:             env,
+		VolumeMounts:    c.volumeMountsForProxyManager(),
 		// TODO: LivenessProbe: c.voltronProbe(),
 
 		// UID 1001 is used in the kosmo Dockerfile.
@@ -535,7 +537,7 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 
 		// TODO
 		{Name: "LISTEN_ADDR", Value: "0.0.0.0:8443"},
-		{Name: "VOLTRON_URL", Value: "https://tigera-voltron.tigera-manager.svc:9443"},
+		{Name: "VOLTRON_URL", Value: "https://tigera-kosmo.tigera-manager.svc:9443"},
 	}
 
 	volumeMounts := []corev1.VolumeMount{c.cfg.TrustedCertBundle.VolumeMount(c.SupportedOSType())}

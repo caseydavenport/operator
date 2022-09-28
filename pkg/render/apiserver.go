@@ -932,10 +932,11 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 	}
 
 	apiServer := corev1.Container{
-		Name:  APIServerContainerName,
-		Image: c.apiServerImage,
-		Args:  c.startUpArgs(),
-		Env:   env,
+		Name:            APIServerContainerName,
+		Image:           c.apiServerImage,
+		ImagePullPolicy: corev1.PullAlways,
+		Args:            c.startUpArgs(),
+		Env:             env,
 		// Needed for permissions to write to the audit log
 		SecurityContext: &corev1.SecurityContext{
 			Privileged: &isPrivileged,

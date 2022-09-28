@@ -17,8 +17,10 @@ package tenant
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
 
@@ -41,6 +43,8 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
+	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
+	"github.com/tigera/operator/pkg/render/tenant"
 	rtenant "github.com/tigera/operator/pkg/render/tenant"
 	"k8s.io/apimachinery/pkg/api/errors"
 )
@@ -281,21 +285,37 @@ func (r *Reconcile) Reconcile(ctx context.Context, request reconcile.Request) (r
 		return reconcile.Result{}, err
 	}
 
+	// Make a map for easy lookup later when we need to delete.
+	tenantIDs := map[string]bool{}
+
+	// Build a set of valid DNS names.
+	// TODO: This is wonky and not legit. It shares a cert across voltrons, and every time a
+	//       new tenant comes online causes all voltrons to be restarted! Sad!
+	// TODO: We include kosmo here as well because es-proxy uses this cert via kosmo. It should really be its own cert,
+	//       but this is a quick hack / prototype anyway.
+	svcDNSNames := []string{"localhost", "tigera-kosmo.tigera-manager.svc"}
+	for _, t := range tenants.Items {
+		ns := fmt.Sprintf("tenant-%s", t.Name) // TODO: Duplicated in render pkg
+		svcDNSNames = append(svcDNSNames, dns.GetServiceDNSNames(rtenant.VoltronName, ns, r.clusterDomain)...)
+	}
+	sort.Strings(svcDNSNames)
+
+	tlsSecret, err := certificateManager.GetOrCreateKeyPair(
+		r.client,
+		render.ManagerTLSSecretName,
+		common.OperatorNamespace(),
+		svcDNSNames)
+	if err != nil {
+		r.status.SetDegraded("Error getting or creating manager TLS certificate", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	// For each tenant, render the necessary objects.
 	one := int32(1)
 	for _, t := range tenants.Items {
-		ns := fmt.Sprintf("tenant-%s", t.Name) // TODO: Duplicated in render pkg
-		svcDNSNames := append(dns.GetServiceDNSNames(rtenant.VoltronName, ns, r.clusterDomain), "localhost")
-		tlsSecret, err := certificateManager.GetOrCreateKeyPair(
-			r.client,
-			render.ManagerTLSSecretName,
-			common.OperatorNamespace(),
-			svcDNSNames)
-		if err != nil {
-			r.status.SetDegraded("Error getting or creating manager TLS certificate", err.Error())
-			return reconcile.Result{}, err
-		}
+		tenantIDs[t.Name] = true
 
+		ns := fmt.Sprintf("tenant-%s", t.Name) // TODO: Duplicated in render pkg
 		cfg := rtenant.Configuration{
 			Tenant:            &t,
 			Installation:      installation,
@@ -332,8 +352,42 @@ func (r *Reconcile) Reconcile(ctx context.Context, request reconcile.Request) (r
 			return reconcile.Result{}, err
 		}
 
-		if err := handler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
-			r.status.SetDegraded("Error creating / updating tenant", err.Error())
+		// Render necessary secrets into the namespace as well.
+		certs := rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
+			Namespace:       ns,
+			ServiceAccounts: []string{tenant.VoltronName},
+			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
+				rcertificatemanagement.NewKeyPairOption(tlsSecret, true, true),
+				rcertificatemanagement.NewKeyPairOption(internalTrafficSecret, false, true),
+				rcertificatemanagement.NewKeyPairOption(tunnelSecret, false, true),
+			},
+			TrustedBundle: trustedBundle,
+		})
+
+		for _, c := range []render.Component{component, certs} {
+			if err := handler.CreateOrUpdateOrDelete(ctx, c, r.status); err != nil {
+				r.status.SetDegraded("Error creating / updating tenant", err.Error())
+				return reconcile.Result{}, err
+			}
+		}
+	}
+
+	// For each namespace that has no corresponding tenant any more, delete it.
+	// TODO: Filter based on label.
+	namespaces := v1.NamespaceList{}
+	if err := r.client.List(ctx, &namespaces); err != nil {
+		r.status.SetDegraded("Error listing namespaces", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	for _, n := range namespaces.Items {
+		if tenantID, ok := n.Labels["operator.tigera.io/tenant"]; !ok {
+			// Not one of ours.
+			continue
+		} else if _, ok := tenantIDs[tenantID]; !ok {
+			// Tenant doesn't exist. Delete the NS.
+			err = r.client.Delete(ctx, &n)
+			r.status.SetDegraded("Error deleting old tenant NS", err.Error())
 			return reconcile.Result{}, err
 		}
 	}

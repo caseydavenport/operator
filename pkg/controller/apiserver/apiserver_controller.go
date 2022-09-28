@@ -290,7 +290,8 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		if managementCluster != nil {
 			tunnelCASecret, err = certificateManager.GetKeyPair(r.client, render.VoltronTunnelSecretName, common.OperatorNamespace())
 			if tunnelCASecret == nil {
-				tunnelSecret, err := certificatemanagement.CreateSelfSignedSecret(render.VoltronTunnelSecretName, common.OperatorNamespace(), "tigera-voltron", []string{"voltron"})
+				// CASEY: TODO: We need a certificate per voltron, not one for all.
+				tunnelSecret, err := certificatemanagement.CreateSelfSignedSecret(render.VoltronTunnelSecretName, common.OperatorNamespace(), "tigera-voltron", []string{"tigera-voltron.tenant-tenant-1", "tigera-voltron.tenant-tenant-2"})
 				if err == nil {
 					tunnelCASecret = certificatemanagement.NewKeyPair(tunnelSecret, nil, "")
 					// Creating the voltron tunnel secret is not (yet) supported by certificate mananger.
@@ -494,5 +495,4 @@ func validateAPIServerResource(instance *operatorv1.APIServer) error {
 		}
 	}
 	return nil
-
 }
