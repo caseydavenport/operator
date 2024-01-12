@@ -140,19 +140,6 @@
         },
         "protocol": "TCP",
         "source": {
-          "selector": "k8s-app == 'intrusion-detection-controller'",
-          "namespaceSelector": "projectcalico.org/name == 'tigera-intrusion-detection'"
-        }
-      },
-      {
-        "action": "Allow",
-        "destination": {
-          "ports": [
-            5554
-          ]
-        },
-        "protocol": "TCP",
-        "source": {
           "selector": "k8s-app == 'elastic-operator'",
           "namespaceSelector": "projectcalico.org/name == 'tigera-eck-operator'"
         }

@@ -324,11 +324,20 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		resources, _ := component.Objects()
 
 		idsControllerRole := rtest.GetResource(resources, render.IntrusionDetectionName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-
 		Expect(idsControllerRole.Rules).To(ContainElement(rbacv1.PolicyRule{
 			APIGroups: []string{"apps"},
 			Resources: []string{"deployments/finalizers"},
 			Verbs:     []string{"update"},
+		}))
+		Expect(idsControllerRole.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups: []string{"linseed.tigera.io"},
+			Resources: []string{"events"},
+			Verbs:     []string{"create", "get"},
+		}))
+		Expect(idsControllerRole.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups: []string{"linseed.tigera.io"},
+			Resources: []string{"threatfeeds_ipset", "threatfeeds_domainnameset"},
+			Verbs:     []string{"create", "delete", "get"},
 		}))
 	})
 
