@@ -23,14 +23,9 @@ import (
 
 // DashboardsJob is the configuration for the Dashboards job.
 type DashboardsJob struct {
-
 	// Spec is the specification of the dashboards job.
 	// +optional
 	Spec *DashboardsJobSpec `json:"spec,omitempty"`
-}
-
-func (in *DashboardsJob) GetMetadata() *Metadata {
-	return nil
 }
 
 func (in *DashboardsJob) GetMinReadySeconds() *int32 {
@@ -97,7 +92,6 @@ func (in *DashboardsJob) GetPriorityClassName() string {
 
 // DashboardsJobSpec defines configuration for the Dashboards job.
 type DashboardsJobSpec struct {
-
 	// Template describes the Dashboards job pod that will be created.
 	// +optional
 	Template *DashboardsJobPodTemplateSpec `json:"template,omitempty"`
@@ -105,7 +99,6 @@ type DashboardsJobSpec struct {
 
 // DashboardsJobPodTemplateSpec is the Dashboards job's PodTemplateSpec
 type DashboardsJobPodTemplateSpec struct {
-
 	// Spec is the Dashboard job's PodSpec.
 	// +optional
 	Spec *DashboardsJobPodSpec `json:"spec,omitempty"`
@@ -113,7 +106,6 @@ type DashboardsJobPodTemplateSpec struct {
 
 // DashboardsJobPodSpec is the Dashboards job's PodSpec.
 type DashboardsJobPodSpec struct {
-
 	// Containers is a list of dashboards job containers.
 	// If specified, this overrides the specified Dashboard job containers.
 	// If omitted, the Dashboard job will use its default values for its containers.

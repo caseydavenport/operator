@@ -23,7 +23,6 @@ import (
 
 // ComplianceReporterPodTemplate is the configuration for the ComplianceReporter PodTemplate.
 type ComplianceReporterPodTemplate struct {
-
 	// Spec is the specification of the ComplianceReporter PodTemplateSpec.
 	// +optional
 	Template *ComplianceReporterPodTemplateSpec `json:"template,omitempty"`
@@ -31,7 +30,6 @@ type ComplianceReporterPodTemplate struct {
 
 // ComplianceReporterPodTemplateSpec is the ComplianceReporter PodTemplateSpec.
 type ComplianceReporterPodTemplateSpec struct {
-
 	// Spec is the ComplianceReporter PodTemplate's PodSpec.
 	// +optional
 	Spec *ComplianceReporterPodSpec `json:"spec,omitempty"`
@@ -78,10 +76,6 @@ type ComplianceReporterPodTemplateInitContainer struct {
 	// If omitted, the ComplianceServer Deployment will use its default value for this init container's resources.
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
-}
-
-func (c *ComplianceReporterPodTemplate) GetMetadata() *Metadata {
-	return nil
 }
 
 func (c *ComplianceReporterPodTemplate) GetMinReadySeconds() *int32 {

@@ -23,7 +23,6 @@ import (
 
 // LinseedDeployment is the configuration for the linseed Deployment.
 type LinseedDeployment struct {
-
 	// Spec is the specification of the linseed Deployment.
 	// +optional
 	Spec *LinseedDeploymentSpec `json:"spec,omitempty"`
@@ -31,7 +30,6 @@ type LinseedDeployment struct {
 
 // LinseedDeploymentSpec defines configuration for the linseed Deployment.
 type LinseedDeploymentSpec struct {
-
 	// Template describes the linseed Deployment pod that will be created.
 	// +optional
 	Template *LinseedDeploymentPodTemplateSpec `json:"template,omitempty"`
@@ -39,7 +37,6 @@ type LinseedDeploymentSpec struct {
 
 // LinseedDeploymentPodTemplateSpec is the linseed Deployment's PodTemplateSpec
 type LinseedDeploymentPodTemplateSpec struct {
-
 	// Spec is the linseed Deployment's PodSpec.
 	// +optional
 	Spec *LinseedDeploymentPodSpec `json:"spec,omitempty"`
@@ -86,10 +83,6 @@ type LinseedDeploymentInitContainer struct {
 	// If omitted, the linseed Deployment will use its default value for this init container's resources.
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
-}
-
-func (c *LinseedDeployment) GetMetadata() *Metadata {
-	return nil
 }
 
 func (c *LinseedDeployment) GetMinReadySeconds() *int32 {

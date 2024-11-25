@@ -23,7 +23,6 @@ import (
 
 // ECKOperatorStatefulSet is the configuration for the ECKOperator StatefulSet.
 type ECKOperatorStatefulSet struct {
-
 	// Spec is the specification of the ECKOperator StatefulSet.
 	// +optional
 	Spec *ECKOperatorStatefulSetSpec `json:"spec,omitempty"`
@@ -31,7 +30,6 @@ type ECKOperatorStatefulSet struct {
 
 // ECKOperatorStatefulSetSpec defines configuration for the ECKOperator StatefulSet.
 type ECKOperatorStatefulSetSpec struct {
-
 	// Template describes the ECKOperator StatefulSet pod that will be created.
 	// +optional
 	Template *ECKOperatorStatefulSetPodTemplateSpec `json:"template,omitempty"`
@@ -39,7 +37,6 @@ type ECKOperatorStatefulSetSpec struct {
 
 // ECKOperatorStatefulSetPodTemplateSpec is the ECKOperator StatefulSet's PodTemplateSpec
 type ECKOperatorStatefulSetPodTemplateSpec struct {
-
 	// Spec is the ECKOperator StatefulSet's PodSpec.
 	// +optional
 	Spec *ECKOperatorStatefulSetPodSpec `json:"spec,omitempty"`
@@ -84,10 +81,6 @@ type ECKOperatorStatefulSetInitContainer struct {
 	// If omitted, the ECKOperator StatefulSet will use its default value for this init container's resources.
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
-}
-
-func (c *ECKOperatorStatefulSet) GetMetadata() *Metadata {
-	return nil
 }
 
 func (c *ECKOperatorStatefulSet) GetMinReadySeconds() *int32 {

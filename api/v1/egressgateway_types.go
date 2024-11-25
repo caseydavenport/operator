@@ -190,7 +190,6 @@ const (
 // EgressGatewayFailureDetection defines the fields the needed for determining Egress Gateway
 // readiness.
 type EgressGatewayFailureDetection struct {
-
 	// HealthTimeoutDataStoreSeconds defines how long Egress Gateway can fail to connect
 	// to the datastore before reporting not ready.
 	// This value must be greater than 0.
@@ -264,7 +263,6 @@ type HTTPProbe struct {
 
 // AWSEgressGateway defines the configurations for deploying EgressGateway in AWS
 type AWSEgressGateway struct {
-
 	// NativeIP defines if EgressGateway is to use an AWS backed IPPool.
 	// Default: Disabled
 	// +kubebuilder:validation:Enum=Enabled;Disabled
@@ -423,10 +421,6 @@ func (c *EgressGateway) GetPodTemplateMetadata() *Metadata {
 }
 
 func (c *EgressGateway) GetMinReadySeconds() *int32 {
-	return nil
-}
-
-func (c *EgressGateway) GetMetadata() *Metadata {
 	return nil
 }
 

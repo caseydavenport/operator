@@ -23,7 +23,6 @@ import (
 // PolicyRecommendationSpec defines configuration for the Calico Enterprise Policy Recommendation
 // service.
 type PolicyRecommendationSpec struct {
-
 	// PolicyRecommendation configures the PolicyRecommendation Deployment.
 	// +optional
 	PolicyRecommendationDeployment *PolicyRecommendationDeployment `json:"policyRecommendationDeployment,omitempty"`
@@ -31,7 +30,6 @@ type PolicyRecommendationSpec struct {
 
 // PolicyRecommendationDeployment is the configuration for the PolicyRecommendation Deployment.
 type PolicyRecommendationDeployment struct {
-
 	// Spec is the specification of the PolicyRecommendation Deployment.
 	// +optional
 	Spec *PolicyRecommendationDeploymentSpec `json:"spec,omitempty"`
@@ -39,7 +37,6 @@ type PolicyRecommendationDeployment struct {
 
 // PolicyRecommendationDeploymentSpec defines configuration for the PolicyRecommendation Deployment.
 type PolicyRecommendationDeploymentSpec struct {
-
 	// Template describes the PolicyRecommendation Deployment pod that will be created.
 	// +optional
 	Template *PolicyRecommendationDeploymentPodTemplateSpec `json:"template,omitempty"`
@@ -47,7 +44,6 @@ type PolicyRecommendationDeploymentSpec struct {
 
 // PolicyRecommendationDeploymentPodTemplateSpec is the PolicyRecommendation Deployment's PodTemplateSpec
 type PolicyRecommendationDeploymentPodTemplateSpec struct {
-
 	// Spec is the PolicyRecommendation Deployment's PodSpec.
 	// +optional
 	Spec *PolicyRecommendationDeploymentPodSpec `json:"spec,omitempty"`
@@ -122,10 +118,6 @@ type PolicyRecommendationList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []PolicyRecommendation `json:"items"`
-}
-
-func (c *PolicyRecommendationDeployment) GetMetadata() *Metadata {
-	return nil
 }
 
 func (c *PolicyRecommendationDeployment) GetMinReadySeconds() *int32 {

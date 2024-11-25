@@ -23,7 +23,6 @@ import (
 
 // ComplianceBenchmarkerDaemonSet is the configuration for the Compliance Benchmarker DaemonSet.
 type ComplianceBenchmarkerDaemonSet struct {
-
 	// Spec is the specification of the Compliance Benchmarker DaemonSet.
 	// +optional
 	Spec *ComplianceBenchmarkerDaemonSetSpec `json:"spec,omitempty"`
@@ -31,7 +30,6 @@ type ComplianceBenchmarkerDaemonSet struct {
 
 // ComplianceBenchmarkerDaemonSetSpec defines configuration for the Compliance Benchmarker DaemonSet.
 type ComplianceBenchmarkerDaemonSetSpec struct {
-
 	// Template describes the Compliance Benchmarker DaemonSet pod that will be created.
 	// +optional
 	Template *ComplianceBenchmarkerDaemonSetPodTemplateSpec `json:"template,omitempty"`
@@ -39,7 +37,6 @@ type ComplianceBenchmarkerDaemonSetSpec struct {
 
 // ComplianceBenchmarkerDaemonSetPodTemplateSpec is the Compliance Benchmarker DaemonSet's PodTemplateSpec
 type ComplianceBenchmarkerDaemonSetPodTemplateSpec struct {
-
 	// Spec is the Compliance Benchmarker DaemonSet's PodSpec.
 	// +optional
 	Spec *ComplianceBenchmarkerDaemonSetPodSpec `json:"spec,omitempty"`
@@ -86,10 +83,6 @@ type ComplianceBenchmarkerDaemonSetInitContainer struct {
 	// If omitted, the Compliance Benchmarker DaemonSet will use its default value for this init container's resources.
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
-}
-
-func (c *ComplianceBenchmarkerDaemonSet) GetMetadata() *Metadata {
-	return nil
 }
 
 func (c *ComplianceBenchmarkerDaemonSet) GetMinReadySeconds() *int32 {

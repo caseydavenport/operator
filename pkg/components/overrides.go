@@ -20,11 +20,12 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-// ReplicatedPodResourceOverrides represents a type that contains the data needed to override a component DaemonSet or Deployment resource.
-type ReplicatedPodResourceOverrides interface {
+type MetadataProvider interface {
 	// GetMetadata returns metadata used to override the DaemonSet/Deployment's metadata.
 	GetMetadata() *opv1.Metadata
+}
 
+type ReplicatedPodResourceOverrides interface {
 	// GetMinReadySeconds returns the value used to override a DaemonSet/Deployment's minReadySeconds.
 	GetMinReadySeconds() *int32
 

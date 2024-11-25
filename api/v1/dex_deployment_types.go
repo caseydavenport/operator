@@ -23,7 +23,6 @@ import (
 
 // DexDeployment is the configuration for the Dex Deployment.
 type DexDeployment struct {
-
 	// Spec is the specification of the Dex Deployment.
 	// +optional
 	Spec *DexDeploymentSpec `json:"spec,omitempty"`
@@ -31,7 +30,6 @@ type DexDeployment struct {
 
 // DexDeploymentSpec defines configuration for the Dex Deployment.
 type DexDeploymentSpec struct {
-
 	// Template describes the Dex Deployment pod that will be created.
 	// +optional
 	Template *DexDeploymentPodTemplateSpec `json:"template,omitempty"`
@@ -39,7 +37,6 @@ type DexDeploymentSpec struct {
 
 // DexDeploymentPodTemplateSpec is the Dex Deployment's PodTemplateSpec
 type DexDeploymentPodTemplateSpec struct {
-
 	// Spec is the Dex Deployment's PodSpec.
 	// +optional
 	Spec *DexDeploymentPodSpec `json:"spec,omitempty"`
@@ -86,10 +83,6 @@ type DexDeploymentInitContainer struct {
 	// If omitted, the Dex Deployment will use its default value for this init container's resources.
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
-}
-
-func (c *DexDeployment) GetMetadata() *Metadata {
-	return nil
 }
 
 func (c *DexDeployment) GetMinReadySeconds() *int32 {

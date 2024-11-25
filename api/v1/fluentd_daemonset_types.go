@@ -23,7 +23,6 @@ import (
 
 // FluentdDaemonSet is the configuration for the Fluentd DaemonSet.
 type FluentdDaemonSet struct {
-
 	// Spec is the specification of the Fluentd DaemonSet.
 	// +optional
 	Spec *FluentdDaemonSetSpec `json:"spec,omitempty"`
@@ -31,7 +30,6 @@ type FluentdDaemonSet struct {
 
 // FluentdDaemonSetSpec defines configuration for the Fluentd DaemonSet.
 type FluentdDaemonSetSpec struct {
-
 	// Template describes the Fluentd DaemonSet pod that will be created.
 	// +optional
 	Template *FluentdDaemonSetPodTemplateSpec `json:"template,omitempty"`
@@ -39,7 +37,6 @@ type FluentdDaemonSetSpec struct {
 
 // FluentdDaemonSetPodTemplateSpec is the Fluentd DaemonSet's PodTemplateSpec
 type FluentdDaemonSetPodTemplateSpec struct {
-
 	// Spec is the Fluentd DaemonSet's PodSpec.
 	// +optional
 	Spec *FluentdDaemonSetPodSpec `json:"spec,omitempty"`
@@ -86,10 +83,6 @@ type FluentdDaemonSetInitContainer struct {
 	// If omitted, the Fluentd DaemonSet will use its default value for this init container's resources.
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
-}
-
-func (c *FluentdDaemonSet) GetMetadata() *Metadata {
-	return nil
 }
 
 func (c *FluentdDaemonSet) GetMinReadySeconds() *int32 {

@@ -23,7 +23,6 @@ import (
 
 // ComplianceServerDeployment is the configuration for the ComplianceServer Deployment.
 type ComplianceServerDeployment struct {
-
 	// Spec is the specification of the ComplianceServer Deployment.
 	// +optional
 	Spec *ComplianceServerDeploymentSpec `json:"spec,omitempty"`
@@ -31,7 +30,6 @@ type ComplianceServerDeployment struct {
 
 // ComplianceServerDeploymentSpec defines configuration for the ComplianceServer Deployment.
 type ComplianceServerDeploymentSpec struct {
-
 	// Template describes the ComplianceServer Deployment pod that will be created.
 	// +optional
 	Template *ComplianceServerDeploymentPodTemplateSpec `json:"template,omitempty"`
@@ -39,7 +37,6 @@ type ComplianceServerDeploymentSpec struct {
 
 // ComplianceServerDeploymentPodTemplateSpec is the ComplianceServer Deployment's PodTemplateSpec
 type ComplianceServerDeploymentPodTemplateSpec struct {
-
 	// Spec is the ComplianceServer Deployment's PodSpec.
 	// +optional
 	Spec *ComplianceServerDeploymentPodSpec `json:"spec,omitempty"`
@@ -86,10 +83,6 @@ type ComplianceServerDeploymentInitContainer struct {
 	// If omitted, the ComplianceServer Deployment will use its default value for this init container's resources.
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
-}
-
-func (c *ComplianceServerDeployment) GetMetadata() *Metadata {
-	return nil
 }
 
 func (c *ComplianceServerDeployment) GetMinReadySeconds() *int32 {

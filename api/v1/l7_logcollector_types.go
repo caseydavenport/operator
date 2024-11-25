@@ -23,7 +23,6 @@ import (
 
 // L7LogCollectorDaemonSet is the configuration for the L7LogCollector DaemonSet.
 type L7LogCollectorDaemonSet struct {
-
 	// Spec is the specification of the L7LogCollector DaemonSet.
 	// +optional
 	Spec *L7LogCollectorDaemonSetSpec `json:"spec,omitempty"`
@@ -31,7 +30,6 @@ type L7LogCollectorDaemonSet struct {
 
 // L7LogCollectorDaemonSetSpec defines configuration for the L7LogCollector DaemonSet.
 type L7LogCollectorDaemonSetSpec struct {
-
 	// Template describes the L7LogCollector DaemonSet pod that will be created.
 	// +optional
 	Template *L7LogCollectorDaemonSetPodTemplateSpec `json:"template,omitempty"`
@@ -39,7 +37,6 @@ type L7LogCollectorDaemonSetSpec struct {
 
 // L7LogCollectorDaemonSetPodTemplateSpec is the L7LogCollector DaemonSet's PodTemplateSpec
 type L7LogCollectorDaemonSetPodTemplateSpec struct {
-
 	// Spec is the L7LogCollector DaemonSet's PodSpec.
 	// +optional
 	Spec *L7LogCollectorDaemonSetPodSpec `json:"spec,omitempty"`
@@ -84,10 +81,6 @@ type L7LogCollectorDaemonSetInitContainer struct {
 	// If omitted, the L7LogCollector DaemonSet will use its default value for this init container's resources.
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
-}
-
-func (c *L7LogCollectorDaemonSet) GetMetadata() *Metadata {
-	return nil
 }
 
 func (c *L7LogCollectorDaemonSet) GetMinReadySeconds() *int32 {

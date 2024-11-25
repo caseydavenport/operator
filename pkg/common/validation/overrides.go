@@ -36,9 +36,11 @@ var NoContainersDefined ValidateContainer = func(container corev1.Container) err
 // ValidateReplicatedPodResourceOverrides validates the given replicated pod resource overrides.
 // validateContainerFn and validateInitContainerFn are used to validate the container overrides.
 func ValidateReplicatedPodResourceOverrides(overrides components.ReplicatedPodResourceOverrides, validateContainerFn ValidateContainer, validateInitContainerFn ValidateContainer) error {
-	if md := overrides.GetMetadata(); md != nil {
-		if err := validateMetadata(md); err != nil {
-			return fmt.Errorf("metadata is invalid: %w", err)
+	if mdp, ok := overrides.(components.MetadataProvider); !ok {
+		if md := mdp.GetMetadata(); md != nil {
+			if err := validateMetadata(md); err != nil {
+				return fmt.Errorf("metadata is invalid: %w", err)
+			}
 		}
 	}
 	if minReadySeconds := overrides.GetMinReadySeconds(); minReadySeconds != nil {

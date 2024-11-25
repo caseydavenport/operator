@@ -85,10 +85,6 @@ type KibanaInitContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *Kibana) GetMetadata() *Metadata {
-	return nil
-}
-
 func (c *Kibana) GetMinReadySeconds() *int32 {
 	return nil
 }
@@ -121,7 +117,6 @@ func (c *Kibana) GetInitContainers() []v1.Container {
 }
 
 func (c *Kibana) GetContainers() []v1.Container {
-
 	if c != nil {
 		if c.Spec != nil {
 			if c.Spec.Template != nil {

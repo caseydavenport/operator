@@ -23,7 +23,6 @@ import (
 
 // ComplianceControllerDeployment is the configuration for the compliance controller Deployment.
 type ComplianceControllerDeployment struct {
-
 	// Spec is the specification of the compliance controller Deployment.
 	// +optional
 	Spec *ComplianceControllerDeploymentSpec `json:"spec,omitempty"`
@@ -31,7 +30,6 @@ type ComplianceControllerDeployment struct {
 
 // ComplianceControllerDeploymentSpec defines configuration for the compliance controller Deployment.
 type ComplianceControllerDeploymentSpec struct {
-
 	// Template describes the compliance controller Deployment pod that will be created.
 	// +optional
 	Template *ComplianceControllerDeploymentPodTemplateSpec `json:"template,omitempty"`
@@ -39,7 +37,6 @@ type ComplianceControllerDeploymentSpec struct {
 
 // ComplianceControllerDeploymentPodTemplateSpec is the compliance controller Deployment's PodTemplateSpec
 type ComplianceControllerDeploymentPodTemplateSpec struct {
-
 	// Spec is the compliance controller Deployment's PodSpec.
 	// +optional
 	Spec *ComplianceControllerDeploymentPodSpec `json:"spec,omitempty"`
@@ -86,10 +83,6 @@ type ComplianceControllerDeploymentInitContainer struct {
 	// If omitted, the compliance controller Deployment will use its default value for this init container's resources.
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
-}
-
-func (c *ComplianceControllerDeployment) GetMetadata() *Metadata {
-	return nil
 }
 
 func (c *ComplianceControllerDeployment) GetMinReadySeconds() *int32 {

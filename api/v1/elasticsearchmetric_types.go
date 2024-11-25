@@ -23,7 +23,6 @@ import (
 
 // ElasticsearchMetricsDeployment is the configuration for the tigera-elasticsearch-metric Deployment.
 type ElasticsearchMetricsDeployment struct {
-
 	// Spec is the specification of the ElasticsearchMetrics Deployment.
 	// +optional
 	Spec *ElasticsearchMetricsDeploymentSpec `json:"spec,omitempty"`
@@ -31,7 +30,6 @@ type ElasticsearchMetricsDeployment struct {
 
 // ElasticsearchMetricsDeploymentSpec defines configuration for the ElasticsearchMetricsDeployment Deployment.
 type ElasticsearchMetricsDeploymentSpec struct {
-
 	// Template describes the ElasticsearchMetrics Deployment pod that will be created.
 	// +optional
 	Template *ElasticsearchMetricsDeploymentPodTemplateSpec `json:"template,omitempty"`
@@ -39,7 +37,6 @@ type ElasticsearchMetricsDeploymentSpec struct {
 
 // ElasticsearchMetricsDeploymentPodTemplateSpec is the ElasticsearchMetricsDeployment's PodTemplateSpec
 type ElasticsearchMetricsDeploymentPodTemplateSpec struct {
-
 	// Spec is the ElasticsearchMetrics Deployment's PodSpec.
 	// +optional
 	Spec *ElasticsearchMetricsDeploymentPodSpec `json:"spec,omitempty"`
@@ -86,10 +83,6 @@ type ElasticsearchMetricsDeploymentInitContainer struct {
 	// If omitted, the ElasticsearchMetrics Deployment will use its default value for this init container's resources.
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
-}
-
-func (c *ElasticsearchMetricsDeployment) GetMetadata() *Metadata {
-	return nil
 }
 
 func (c *ElasticsearchMetricsDeployment) GetMinReadySeconds() *int32 {

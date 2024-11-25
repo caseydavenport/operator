@@ -45,14 +45,16 @@ type replicatedPodResource struct {
 
 // applyReplicatedPodResourceOverrides takes the given replicated pod resource data and applies the overrides.
 func applyReplicatedPodResourceOverrides(r *replicatedPodResource, overrides components.ReplicatedPodResourceOverrides) *replicatedPodResource {
-	if metadata := overrides.GetMetadata(); metadata != nil {
-		if len(metadata.Labels) > 0 {
-			r.labels = common.MapExistsOrInitialize(r.labels)
-			common.MergeMaps(metadata.Labels, r.labels)
-		}
-		if len(metadata.Annotations) > 0 {
-			r.annotations = common.MapExistsOrInitialize(r.annotations)
-			common.MergeMaps(metadata.Annotations, r.annotations)
+	if mdp, ok := overrides.(components.MetadataProvider); ok {
+		if metadata := mdp.GetMetadata(); metadata != nil {
+			if len(metadata.Labels) > 0 {
+				r.labels = common.MapExistsOrInitialize(r.labels)
+				common.MergeMaps(metadata.Labels, r.labels)
+			}
+			if len(metadata.Annotations) > 0 {
+				r.annotations = common.MapExistsOrInitialize(r.annotations)
+				common.MergeMaps(metadata.Annotations, r.annotations)
+			}
 		}
 	}
 	if minReadySeconds := overrides.GetMinReadySeconds(); minReadySeconds != nil {

@@ -23,7 +23,6 @@ import (
 
 // GuardianDeployment is the configuration for the guardian Deployment.
 type GuardianDeployment struct {
-
 	// Spec is the specification of the guardian Deployment.
 	// +optional
 	Spec *GuardianDeploymentSpec `json:"spec,omitempty"`
@@ -31,7 +30,6 @@ type GuardianDeployment struct {
 
 // GuardianDeploymentSpec defines configuration for the guardian Deployment.
 type GuardianDeploymentSpec struct {
-
 	// Template describes the guardian Deployment pod that will be created.
 	// +optional
 	Template *GuardianDeploymentPodTemplateSpec `json:"template,omitempty"`
@@ -39,7 +37,6 @@ type GuardianDeploymentSpec struct {
 
 // GuardianDeploymentPodTemplateSpec is the guardian Deployment's PodTemplateSpec
 type GuardianDeploymentPodTemplateSpec struct {
-
 	// Spec is the guardian Deployment's PodSpec.
 	// +optional
 	Spec *GuardianDeploymentPodSpec `json:"spec,omitempty"`
@@ -84,10 +81,6 @@ type GuardianDeploymentInitContainer struct {
 	// If omitted, the guardian Deployment will use its default value for this init container's resources.
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
-}
-
-func (c *GuardianDeployment) GetMetadata() *Metadata {
-	return nil
 }
 
 func (c *GuardianDeployment) GetMinReadySeconds() *int32 {

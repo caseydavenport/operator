@@ -23,7 +23,6 @@ import (
 
 // ComplianceSnapshotterDeployment is the configuration for the compliance snapshotter Deployment.
 type ComplianceSnapshotterDeployment struct {
-
 	// Spec is the specification of the compliance snapshotter Deployment.
 	// +optional
 	Spec *ComplianceSnapshotterDeploymentSpec `json:"spec,omitempty"`
@@ -31,7 +30,6 @@ type ComplianceSnapshotterDeployment struct {
 
 // ComplianceSnapshotterDeploymentSpec defines configuration for the compliance snapshotter Deployment.
 type ComplianceSnapshotterDeploymentSpec struct {
-
 	// Template describes the compliance snapshotter Deployment pod that will be created.
 	// +optional
 	Template *ComplianceSnapshotterDeploymentPodTemplateSpec `json:"template,omitempty"`
@@ -39,7 +37,6 @@ type ComplianceSnapshotterDeploymentSpec struct {
 
 // ComplianceSnapshotterDeploymentPodTemplateSpec is the compliance snapshotter Deployment's PodTemplateSpec
 type ComplianceSnapshotterDeploymentPodTemplateSpec struct {
-
 	// Spec is the compliance snapshotter Deployment's PodSpec.
 	// +optional
 	Spec *ComplianceSnapshotterDeploymentPodSpec `json:"spec,omitempty"`
@@ -86,10 +83,6 @@ type ComplianceSnapshotterDeploymentInitContainer struct {
 	// If omitted, the compliance snapshotter Deployment will use its default value for this init container's resources.
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
-}
-
-func (c *ComplianceSnapshotterDeployment) GetMetadata() *Metadata {
-	return nil
 }
 
 func (c *ComplianceSnapshotterDeployment) GetMinReadySeconds() *int32 {

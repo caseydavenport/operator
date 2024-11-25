@@ -23,7 +23,6 @@ import (
 
 // EKSLogForwarderDeployment is the configuration for the EKSLogForwarder Deployment.
 type EKSLogForwarderDeployment struct {
-
 	// Spec is the specification of the EKSLogForwarder Deployment.
 	// +optional
 	Spec *EKSLogForwarderDeploymentSpec `json:"spec,omitempty"`
@@ -31,7 +30,6 @@ type EKSLogForwarderDeployment struct {
 
 // EKSLogForwarderDeploymentSpec defines configuration for the EKSLogForwarder Deployment.
 type EKSLogForwarderDeploymentSpec struct {
-
 	// Template describes the EKSLogForwarder Deployment pod that will be created.
 	// +optional
 	Template *EKSLogForwarderDeploymentPodTemplateSpec `json:"template,omitempty"`
@@ -39,7 +37,6 @@ type EKSLogForwarderDeploymentSpec struct {
 
 // EKSLogForwarderDeploymentPodTemplateSpec is the EKSLogForwarder Deployment's PodTemplateSpec
 type EKSLogForwarderDeploymentPodTemplateSpec struct {
-
 	// Spec is the EKSLogForwarder Deployment's PodSpec.
 	// +optional
 	Spec *EKSLogForwarderDeploymentPodSpec `json:"spec,omitempty"`
@@ -86,10 +83,6 @@ type EKSLogForwarderDeploymentInitContainer struct {
 	// If omitted, the EKSLogForwarder Deployment will use its default value for this init container's resources.
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
-}
-
-func (c *EKSLogForwarderDeployment) GetMetadata() *Metadata {
-	return nil
 }
 
 func (c *EKSLogForwarderDeployment) GetMinReadySeconds() *int32 {
