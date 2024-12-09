@@ -28,6 +28,7 @@ import (
 
 	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	"github.com/tigera/operator/pkg/render/goldmane"
 
 	"github.com/go-logr/logr"
 	configv1 "github.com/openshift/api/config/v1"
@@ -1404,6 +1405,10 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		BindingNamespaces:           []string{common.CalicoNamespace},
 	}
 	components = append(components, kubecontrollers.NewCalicoKubeControllers(&kubeControllersCfg))
+
+	// And Goldmane.
+	goldmaneCfg := goldmane.Configuration{Installation: &instance.Spec}
+	components = append(components, goldmane.New(&goldmaneCfg))
 
 	// v3 NetworkPolicy will fail to reconcile if the API server deployment is unhealthy. In case the API Server
 	// deployment becomes unhealthy and reconciliation of non-NetworkPolicy resources in the core controller
