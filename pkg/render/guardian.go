@@ -140,13 +140,17 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 		managerServiceAccount(ManagerNamespace),
 		managerClusterRole(true, c.cfg.Installation.KubernetesProvider, nil),
 		managerClusterRoleBinding([]string{ManagerNamespace}),
-
-		// Install default UI settings for this managed cluster.
-		managerClusterWideSettingsGroup(),
-		managerUserSpecificSettingsGroup(),
-		managerClusterWideTigeraLayer(),
-		managerClusterWideDefaultView(),
 	)
+
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		// Install default UI settings for this managed cluster.
+		objs = append(objs,
+			managerClusterWideSettingsGroup(),
+			managerUserSpecificSettingsGroup(),
+			managerClusterWideTigeraLayer(),
+			managerClusterWideDefaultView(),
+		)
+	}
 
 	return objs, nil
 }

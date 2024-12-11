@@ -14,9 +14,13 @@
 package goldmane
 
 import (
+	"fmt"
+
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -129,6 +133,7 @@ func (g *goldmane) Objects() (objsToCreate []client.Object, objsToDelete []clien
 		&clusterRoleBinding,
 		&deployment,
 		&svc,
+		g.networkPolicy(),
 	}, nil
 }
 
@@ -137,6 +142,54 @@ func (g *goldmane) container() corev1.Container {
 		Name:            "goldmane",
 		Image:           "caseydavenport/goldmane:latest",
 		ImagePullPolicy: render.ImagePullPolicy(),
+		Env: []corev1.EnvVar{
+			{
+				Name:  "PUSH_URL",
+				Value: fmt.Sprintf("https://%s.%s.svc:8080", render.GuardianServiceName, render.GuardianNamespace),
+			},
+		},
+	}
+}
+
+func (g *goldmane) networkPolicy() *v3.NetworkPolicy {
+	egressRules := []v3.Rule{}
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, g.cfg.Installation.KubernetesProvider.IsOpenShift())
+	egressRules = append(egressRules, []v3.Rule{
+		{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Destination: v3.EntityRule{
+				Ports: networkpolicy.Ports(443, 6443, 12388),
+			},
+		},
+	}...)
+
+	egressRules = append(egressRules, v3.Rule{
+		Action:      v3.Allow,
+		Protocol:    &networkpolicy.TCPProtocol,
+		Destination: render.GuardianEntityRule,
+	})
+
+	ingressRules := []v3.Rule{
+		{
+			Action: v3.Allow,
+		},
+	}
+
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "allow-tigera.goldmane",
+			Namespace: common.CalicoNamespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Order:    &networkpolicy.HighPrecedenceOrder,
+			Tier:     networkpolicy.TigeraComponentTierName,
+			Selector: networkpolicy.KubernetesAppSelector("goldmane"),
+			Types:    []v3.PolicyType{v3.PolicyTypeEgress, v3.PolicyTypeIngress},
+			Egress:   egressRules,
+			Ingress:  ingressRules,
+		},
 	}
 }
 

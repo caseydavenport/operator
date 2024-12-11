@@ -146,21 +146,6 @@ func (r *ReconcileTiers) Reconcile(ctx context.Context, request reconcile.Reques
 		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
-	// Ensure a license is present that enables this controller to create/manage tiers.
-	license, err := utils.FetchLicenseKey(ctx, r.client)
-	if err != nil {
-		if apierrors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceNotFound, "License not found", err, reqLogger)
-			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
-		}
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying license", err, reqLogger)
-		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
-	}
-	if !utils.IsFeatureActive(license, common.TiersFeature) {
-		r.status.SetDegraded(operatorv1.ResourceValidationError, "Feature is not active - License does not support feature: tiers", err, reqLogger)
-		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
-	}
-
 	tiersConfig, reconcileResult := r.prepareTiersConfig(ctx, reqLogger)
 	if reconcileResult != nil {
 		return *reconcileResult, nil
@@ -169,7 +154,7 @@ func (r *ReconcileTiers) Reconcile(ctx context.Context, request reconcile.Reques
 	component := tiers.Tiers(tiersConfig)
 
 	componentHandler := utils.NewComponentHandler(log, r.client, r.scheme, nil)
-	err = componentHandler.CreateOrUpdateOrDelete(ctx, component, nil)
+	err := componentHandler.CreateOrUpdateOrDelete(ctx, component, nil)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 		return reconcile.Result{}, err
