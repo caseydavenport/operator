@@ -155,7 +155,7 @@ func (g *goldmane) container() corev1.Container {
 		Env: []corev1.EnvVar{
 			{
 				Name:  "PUSH_URL",
-				Value: fmt.Sprintf("https://%s.%s.svc", render.GuardianServiceName, render.GuardianNamespace),
+				Value: fmt.Sprintf("https://%s.%s.svc/api/v1/flows/logs/bulk", render.GuardianServiceName, render.GuardianNamespace),
 			},
 			{
 				Name:  "CA_CERT_PATH",
