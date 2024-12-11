@@ -19,8 +19,10 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/common/meta"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -32,7 +34,8 @@ import (
 )
 
 type Configuration struct {
-	Installation *operatorv1.InstallationSpec
+	Installation  *operatorv1.InstallationSpec
+	TrustedBundle certificatemanagement.TrustedBundleRO
 }
 
 type goldmane struct {
@@ -104,13 +107,19 @@ func (g *goldmane) Objects() (objsToCreate []client.Object, objsToDelete []clien
 			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": "goldmane"}},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{"k8s-app": "goldmane"},
+					Labels:      map[string]string{"k8s-app": "goldmane"},
+					Annotations: g.cfg.TrustedBundle.HashAnnotations(),
 				},
 				Spec: corev1.PodSpec{
 					Tolerations:        rmeta.TolerateAll,
 					ImagePullSecrets:   g.cfg.Installation.ImagePullSecrets,
 					ServiceAccountName: serviceaccount.Name,
-					Containers:         []corev1.Container{g.container()},
+					Containers: []corev1.Container{
+						g.container(),
+					},
+					Volumes: []corev1.Volume{
+						g.cfg.TrustedBundle.Volume(),
+					},
 				},
 			},
 		},
@@ -142,10 +151,15 @@ func (g *goldmane) container() corev1.Container {
 		Name:            "goldmane",
 		Image:           "caseydavenport/goldmane:latest",
 		ImagePullPolicy: render.ImagePullPolicy(),
+		VolumeMounts:    g.cfg.TrustedBundle.VolumeMounts(meta.OSTypeLinux),
 		Env: []corev1.EnvVar{
 			{
 				Name:  "PUSH_URL",
-				Value: fmt.Sprintf("https://%s.%s.svc:8080", render.GuardianServiceName, render.GuardianNamespace),
+				Value: fmt.Sprintf("https://%s.%s.svc", render.GuardianServiceName, render.GuardianNamespace),
+			},
+			{
+				Name:  "CA_CERT_PATH",
+				Value: g.cfg.TrustedBundle.MountPath(),
 			},
 		},
 	}
