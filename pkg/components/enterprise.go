@@ -168,9 +168,9 @@ var (
 	}
 
 	ComponentManagerProxy = Component{
-		Version:  "master",
-		Image:    "tigera/voltron",
-		Registry: "",
+		Version:  "ft",
+		Image:    "casey/voltron",
+		Registry: "gcr.io/unique-caldron-775/",
 	}
 
 	ComponentPacketCapture = Component{

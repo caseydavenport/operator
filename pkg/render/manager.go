@@ -814,6 +814,14 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 				},
 				Verbs: []string{"dismiss", "delete"},
 			},
+			{
+				// TODO: Hack for prototype. Provides access to write flow logs.
+				APIGroups: []string{"linseed.tigera.io"},
+				Resources: []string{
+					"flowlogs",
+				},
+				Verbs: []string{"create"},
+			},
 		},
 	}
 
