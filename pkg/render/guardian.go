@@ -210,6 +210,37 @@ func (c *GuardianComponent) serviceAccount() *corev1.ServiceAccount {
 }
 
 func (c *GuardianComponent) clusterRole() *rbacv1.ClusterRole {
+	if true {
+		return c.clusterRoleNoImpersonate()
+	}
+	return c.clusterRoleImpersonate()
+}
+
+func (c *GuardianComponent) clusterRoleNoImpersonate() *rbacv1.ClusterRole {
+	return &rbacv1.ClusterRole{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: GuardianClusterRoleName,
+		},
+		Rules: []rbacv1.PolicyRule{
+			// Baseline ability to GET everything. This should be limited specifically to required resources though.
+			{
+				APIGroups: []string{"*"},
+				Resources: []string{"*"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+			// Some create permissions we should remove the need for.
+			// SubjectAccessReview (sent by ui-apis)
+			{
+				APIGroups: []string{"authorization.k8s.io"},
+				Resources: []string{"subjectaccessreviews"},
+				Verbs:     []string{"create"},
+			},
+		},
+	}
+}
+
+func (c *GuardianComponent) clusterRoleImpersonate() *rbacv1.ClusterRole {
 	policyRules := []rbacv1.PolicyRule{
 		{
 			APIGroups: []string{""},
