@@ -236,6 +236,18 @@ func (c *GuardianComponent) clusterRoleNoImpersonate() *rbacv1.ClusterRole {
 				Resources: []string{"subjectaccessreviews"},
 				Verbs:     []string{"create"},
 			},
+			// Service graph needs to get felixconfig.
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"felixconfigurations"},
+				Verbs:     []string{"get"},
+			},
+			// TODO: Remove. Useful for debugging.
+			{
+				APIGroups: []string{""},
+				Resources: []string{"users", "groups", "serviceaccounts"},
+				Verbs:     []string{"impersonate"},
+			},
 		},
 	}
 }
