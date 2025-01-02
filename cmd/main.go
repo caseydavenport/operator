@@ -375,13 +375,13 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 	}
 	setupLog.WithValues("tenancy", multiTenant).Info("Checking tenancy mode")
 
-	// Determine if we need to start the TSEE specific controllers.
+	// Determine if we need to start the Calico Enterprise specific controllers.
 	enterpriseCRDExists, err := utils.RequiresTigeraSecure(mgr.GetConfig())
 	if err != nil {
-		setupLog.Error(err, "Failed to determine if TSEE is required")
+		setupLog.Error(err, "Failed to determine if Calico Enterprise is required")
 		os.Exit(1)
 	}
-	setupLog.WithValues("required", enterpriseCRDExists).Info("Checking if TSEE controllers are required")
+	setupLog.WithValues("required", enterpriseCRDExists).Info("Checking if Calico Enterprise controllers are required")
 
 	clusterDomain, err := dns.GetClusterDomain(dns.DefaultResolveConfPath)
 	if err != nil {

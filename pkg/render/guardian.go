@@ -22,6 +22,7 @@ import (
 	"net/url"
 
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/ptr"
 	operatorurl "github.com/tigera/operator/pkg/url"
 	"golang.org/x/net/http/httpproxy"
 
@@ -145,8 +146,7 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 		c.deployment(),
 		c.service(),
 		c.aggregatorService(),
-		c.aggregatorNetworkPolicy(),
-		secret.CopyToNamespace(GuardianNamespace(c.cfg.Installation.Variant), c.cfg.TunnelSecret)[0],
+		// c.aggregatorNetworkPolicy(),
 		c.cfg.TrustedCertBundle.ConfigMap(GuardianNamespace(c.cfg.Installation.Variant)),
 
 		// Add tigera-manager service account for impersonation. In managed clusters, the tigera-manager
@@ -156,6 +156,13 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 		managerClusterRole(true, c.cfg.Installation.KubernetesProvider, nil),
 		managerClusterRoleBinding([]string{ManagerNamespace}),
 	)
+
+	if c.cfg.TunnelSecret != nil {
+		objs = append(
+			objs,
+			secret.CopyToNamespace(GuardianNamespace(c.cfg.Installation.Variant), c.cfg.TunnelSecret)[0],
+		)
+	}
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		// Install default UI settings for this managed cluster.
@@ -398,11 +405,17 @@ func (c *GuardianComponent) deployment() *appsv1.Deployment {
 func (c *GuardianComponent) volumes() []corev1.Volume {
 	return []corev1.Volume{
 		c.cfg.TrustedCertBundle.Volume(),
+
 		{
 			Name: GuardianVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
 					SecretName: GuardianSecretName,
+
+					// This is marked optional, since we only need this when actually establishing
+					// a tunnel to the remote cluster, and we don't want to have to reinstall
+					// the pod as part of connection flow.
+					Optional: ptr.BoolToPtr(true),
 				},
 			},
 		},
@@ -448,14 +461,26 @@ func (c *GuardianComponent) container() corev1.Container {
 
 func (c *GuardianComponent) volumeMounts() []corev1.VolumeMount {
 	return append(
+		// Add the volume mounts for the trusted CA bundle, which contains the full set of CA certificates to
+		// trust for all containers in the pod.
 		c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType()),
-		corev1.VolumeMount{Name: GuardianVolumeName, MountPath: "/certs/", ReadOnly: true},
+
+		// Add the volume mount for the secret containing the tunnel secret.
+		corev1.VolumeMount{
+			Name:      GuardianVolumeName,
+			MountPath: "/certs/",
+			ReadOnly:  true,
+		},
 	)
 }
 
 func (c *GuardianComponent) annotations() map[string]string {
 	annotations := c.cfg.TrustedCertBundle.HashAnnotations()
-	annotations["hash.operator.tigera.io/tigera-managed-cluster-connection"] = rmeta.AnnotationHash(c.cfg.TunnelSecret.Data)
+
+	if c.cfg.TunnelSecret != nil {
+		// TODO: Make Guardian capable of reloading the secret without a restart.
+		annotations["hash.operator.tigera.io/tigera-managed-cluster-connection"] = rmeta.AnnotationHash(c.cfg.TunnelSecret.Data)
+	}
 	return annotations
 }
 

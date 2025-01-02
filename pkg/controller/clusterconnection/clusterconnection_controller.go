@@ -66,6 +66,8 @@ var log = logf.Log.WithName(controllerName)
 // Add creates a new ManagementClusterConnection Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and start it when the Manager is started. This controller is meant only for enterprise users.
 func Add(mgr manager.Manager, opts options.AddOptions) error {
+	log.Info("Creating a new management cluster connection controller")
+
 	statusManager := status.New(mgr.GetClient(), "management-cluster-connection", opts.KubernetesVersion)
 
 	// Create the reconciler
@@ -87,13 +89,14 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	// Watch for changes to License and Tier, as their status is used as input to determine whether network policy should be reconciled by this controller.
 	if opts.EnterpriseCRDExists {
 		go utils.WaitToAddLicenseKeyWatch(c, k8sClient, log, nil)
-	}
-	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, k8sClient, log, tierWatchReady)
 
-	go utils.WaitToAddNetworkPolicyWatches(c, k8sClient, log, []types.NamespacedName{
-		{Name: render.GuardianPolicyName, Namespace: render.GuardianNamespace(operatorv1.TigeraSecureEnterprise)},
-		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: render.GuardianNamespace(operatorv1.TigeraSecureEnterprise)},
-	})
+		go utils.WaitToAddNetworkPolicyWatches(c, k8sClient, log, []types.NamespacedName{
+			{Name: render.GuardianPolicyName, Namespace: render.GuardianNamespace(operatorv1.TigeraSecureEnterprise)},
+			{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: render.GuardianNamespace(operatorv1.TigeraSecureEnterprise)},
+		})
+	}
+
+	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, k8sClient, log, tierWatchReady)
 
 	secretsToWatch := []string{}
 	if opts.EnterpriseCRDExists {
@@ -287,12 +290,13 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	// Copy the secret from the operator namespace to the guardian namespace if it is present.
 	tunnelSecret := &corev1.Secret{}
 	err = r.client.Get(ctx, types.NamespacedName{Name: render.GuardianSecretName, Namespace: common.OperatorNamespace()}, tunnelSecret)
-	if err != nil {
+	if err != nil && !k8serrors.IsNotFound(err) {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving secrets from guardian namespace", err, reqLogger)
-		if !k8serrors.IsNotFound(err) {
-			return result, nil
-		}
 		return result, err
+	} else if k8serrors.IsNotFound(err) {
+		// Secret is not present. We still want to install Guardian, but we won't be able to connect until the secret is present.
+		reqLogger.Info("Guardian tunnel secret not available")
+		tunnelSecret = nil
 	}
 
 	var trustedCertBundle certificatemanagement.TrustedBundle
