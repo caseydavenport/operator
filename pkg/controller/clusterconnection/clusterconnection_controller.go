@@ -334,6 +334,22 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		}
 	}
 
+	// If configured to connect to Calico Cloud, ensure the trusted bundle includes the Calico Cloud CA.
+	linseedCertificate, err := certificateManager.GetCertificate(r.client, render.VoltronLinseedPublicCert, common.OperatorNamespace())
+	if err != nil && !k8serrors.IsNotFound(err) {
+		r.status.SetDegraded(
+			operatorv1.ResourceValidationError,
+			fmt.Sprintf("Failed to retrieve / validate  %s/%s", render.VoltronLinseedPublicCert, common.OperatorNamespace()),
+			err,
+			reqLogger,
+		)
+		return reconcile.Result{}, err
+	}
+	if linseedCertificate != nil {
+		log.Info("Should add Linseed certificate to trusted bundle")
+		secretsToTrust = append(secretsToTrust, render.VoltronLinseedPublicCert)
+	}
+
 	for _, secretName := range secretsToTrust {
 		secret, err := certificateManager.GetCertificate(r.client, secretName, common.OperatorNamespace())
 		if err != nil {

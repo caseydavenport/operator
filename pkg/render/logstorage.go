@@ -1008,7 +1008,6 @@ func (es *elasticsearchComponent) elasticsearchInternalAllowTigeraPolicy() *v3.N
 }
 
 func (es *elasticsearchComponent) elasticsearchRolesAndBindings() ([]*rbacv1.Role, []*rbacv1.RoleBinding) {
-
 	secretsRole := &rbacv1.Role{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      CalicoKubeControllerSecret,
@@ -1222,7 +1221,7 @@ func (m *managedClusterLogStorage) linseedExternalService() *corev1.Service {
 		},
 		Spec: corev1.ServiceSpec{
 			Type:         corev1.ServiceTypeExternalName,
-			ExternalName: fmt.Sprintf("%s.%s.svc.%s", GuardianServiceName, GuardianNamespace, m.cfg.ClusterDomain),
+			ExternalName: fmt.Sprintf("%s.%s.svc.%s", GuardianServiceName, GuardianNamespace(""), m.cfg.ClusterDomain),
 		},
 	}
 }
@@ -1236,7 +1235,7 @@ func (m *managedClusterLogStorage) elasticsearchExternalService() *corev1.Servic
 		},
 		Spec: corev1.ServiceSpec{
 			Type:         corev1.ServiceTypeExternalName,
-			ExternalName: fmt.Sprintf("%s.%s.svc.%s", GuardianServiceName, GuardianNamespace, m.cfg.ClusterDomain),
+			ExternalName: fmt.Sprintf("%s.%s.svc.%s", GuardianServiceName, GuardianNamespace(""), m.cfg.ClusterDomain),
 		},
 	}
 }
@@ -1356,7 +1355,6 @@ func (m managedClusterLogStorage) linseedExternalRolesAndBindings() ([]*rbacv1.C
 // In managed clusters we need to provision roles and bindings for kubecontrollers to provide permissions
 // to manipulate secrets
 func (m managedClusterLogStorage) kubeControllersRolesAndBindings() ([]*rbacv1.Role, []*rbacv1.RoleBinding) {
-
 	// Create Role and Binding to the operator namespace for kubecontroller to manipulate the needed secrets.
 	operatorSecretsRole := &rbacv1.Role{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1394,5 +1392,4 @@ func (m managedClusterLogStorage) kubeControllersRolesAndBindings() ([]*rbacv1.R
 	}
 
 	return []*rbacv1.Role{operatorSecretsRole}, []*rbacv1.RoleBinding{operatorSecretBinding}
-
 }
