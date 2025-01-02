@@ -364,7 +364,7 @@ func allowTigeraPolicy(cfg *PacketCaptureApiConfiguration) *v3.NetworkPolicy {
 		ingressRules = append(ingressRules, v3.Rule{
 			Action:   v3.Allow,
 			Protocol: &networkpolicy.TCPProtocol,
-			Source:   GuardianSourceEntityRule,
+			Source:   GuardianSourceEntityRule(cfg.Installation.Variant),
 			Destination: v3.EntityRule{
 				Ports: networkpolicy.Ports(PacketCapturePort),
 			},

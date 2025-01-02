@@ -1024,7 +1024,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerAllowTigeraPol
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: GuardianEntityRule,
+			Destination: GuardianEntityRule(c.cfg.Installation.Variant),
 		})
 	} else {
 		egressRules = append(egressRules, v3.Rule{

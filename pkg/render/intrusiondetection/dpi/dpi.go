@@ -536,7 +536,7 @@ func (d *dpiComponent) dpiAllowTigeraPolicy() *v3.NetworkPolicy {
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: render.GuardianServiceSelectorEntityRule,
+			Destination: render.GuardianServiceSelectorEntityRule(d.cfg.Installation.Variant),
 		})
 	} else {
 		egressRules = append(egressRules, v3.Rule{

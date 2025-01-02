@@ -789,7 +789,7 @@ func kubeControllersAllowTigeraPolicy(cfg *KubeControllersConfiguration) *v3.Net
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: render.GuardianEntityRule,
+			Destination: render.GuardianEntityRule(cfg.Installation.Variant),
 		})
 	} else {
 		egressRules = append(egressRules, v3.Rule{

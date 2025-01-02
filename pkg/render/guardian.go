@@ -20,6 +20,7 @@ import (
 	"net"
 	"net/url"
 
+	"github.com/tigera/operator/pkg/common"
 	operatorurl "github.com/tigera/operator/pkg/url"
 	"golang.org/x/net/http/httpproxy"
 
@@ -48,7 +49,6 @@ import (
 // The names of the components related to the Guardian related rendered objects.
 const (
 	GuardianName                   = "tigera-guardian"
-	GuardianNamespace              = GuardianName
 	GuardianServiceAccountName     = GuardianName
 	GuardianClusterRoleName        = GuardianName
 	GuardianClusterRoleBindingName = GuardianName
@@ -60,11 +60,29 @@ const (
 	GuardianPolicyName             = networkpolicy.TigeraComponentPolicyPrefix + "guardian-access"
 )
 
-var (
-	GuardianEntityRule                = networkpolicy.CreateEntityRule(GuardianNamespace, GuardianDeploymentName, GuardianTargetPort)
-	GuardianSourceEntityRule          = networkpolicy.CreateSourceEntityRule(GuardianNamespace, GuardianDeploymentName)
-	GuardianServiceSelectorEntityRule = networkpolicy.CreateServiceSelectorEntityRule(GuardianNamespace, GuardianName)
-)
+func GuardianEntityRule(variant operatorv1.ProductVariant) v3.EntityRule {
+	ns := GuardianNamespace(variant)
+	return networkpolicy.CreateEntityRule(ns, GuardianDeploymentName, GuardianTargetPort)
+}
+
+func GuardianSourceEntityRule(variant operatorv1.ProductVariant) v3.EntityRule {
+	ns := GuardianNamespace(variant)
+	return networkpolicy.CreateSourceEntityRule(ns, GuardianDeploymentName)
+}
+
+func GuardianServiceSelectorEntityRule(variant operatorv1.ProductVariant) v3.EntityRule {
+	ns := GuardianNamespace(variant)
+	return networkpolicy.CreateServiceSelectorEntityRule(ns, GuardianName)
+}
+
+func GuardianNamespace(variant operatorv1.ProductVariant) string {
+	switch variant {
+	case operatorv1.TigeraSecureEnterprise:
+		return "tigera-guardian"
+	default:
+		return common.CalicoNamespace
+	}
+}
 
 func Guardian(cfg *GuardianConfiguration) Component {
 	return &GuardianComponent{
@@ -80,12 +98,13 @@ func GuardianPolicy(cfg *GuardianConfiguration) (Component, error) {
 
 	return NewPassthrough(
 		guardianAccessPolicy,
-		networkpolicy.AllowTigeraDefaultDeny(GuardianNamespace),
+		networkpolicy.AllowTigeraDefaultDeny(GuardianNamespace(cfg.Installation.Variant)),
 	), nil
 }
 
 // GuardianConfiguration contains all the config information needed to render the component.
 type GuardianConfiguration struct {
+	Namespace                   string
 	URL                         string
 	PullSecrets                 []*corev1.Secret
 	OpenShift                   bool
@@ -121,18 +140,18 @@ func (c *GuardianComponent) SupportedOSType() rmeta.OSType {
 
 func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
-		CreateNamespace(GuardianNamespace, c.cfg.Installation.KubernetesProvider, PSSRestricted, c.cfg.Installation.Azure),
+		CreateNamespace(GuardianNamespace(c.cfg.Installation.Variant), c.cfg.Installation.KubernetesProvider, PSSRestricted, c.cfg.Installation.Azure),
 	}
 
-	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(GuardianNamespace, c.cfg.PullSecrets...)...)...)
+	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(GuardianNamespace(c.cfg.Installation.Variant), c.cfg.PullSecrets...)...)...)
 	objs = append(objs,
 		c.serviceAccount(),
 		c.clusterRole(),
 		c.clusterRoleBinding(),
 		c.deployment(),
 		c.service(),
-		secret.CopyToNamespace(GuardianNamespace, c.cfg.TunnelSecret)[0],
-		c.cfg.TrustedCertBundle.ConfigMap(GuardianNamespace),
+		secret.CopyToNamespace(GuardianNamespace(c.cfg.Installation.Variant), c.cfg.TunnelSecret)[0],
+		c.cfg.TrustedCertBundle.ConfigMap(GuardianNamespace(c.cfg.Installation.Variant)),
 
 		// Add tigera-manager service account for impersonation. In managed clusters, the tigera-manager
 		// service account is always within the tigera-manager namespace - regardless of (multi)tenancy mode.
@@ -163,7 +182,7 @@ func (c *GuardianComponent) service() *corev1.Service {
 	return &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      GuardianServiceName,
-			Namespace: GuardianNamespace,
+			Namespace: GuardianNamespace(c.cfg.Installation.Variant),
 		},
 		Spec: corev1.ServiceSpec{
 			Selector: map[string]string{
@@ -205,7 +224,7 @@ func (c *GuardianComponent) service() *corev1.Service {
 func (c *GuardianComponent) serviceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: GuardianServiceAccountName, Namespace: GuardianNamespace},
+		ObjectMeta: metav1.ObjectMeta{Name: GuardianServiceAccountName, Namespace: GuardianNamespace(c.cfg.Installation.Variant)},
 	}
 }
 
@@ -294,7 +313,7 @@ func (c *GuardianComponent) clusterRoleBinding() *rbacv1.ClusterRoleBinding {
 			{
 				Kind:      "ServiceAccount",
 				Name:      GuardianServiceAccountName,
-				Namespace: GuardianNamespace,
+				Namespace: GuardianNamespace(c.cfg.Installation.Variant),
 			},
 		},
 	}
@@ -312,7 +331,7 @@ func (c *GuardianComponent) deployment() *appsv1.Deployment {
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      GuardianDeploymentName,
-			Namespace: GuardianNamespace,
+			Namespace: GuardianNamespace(c.cfg.Installation.Variant),
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
@@ -577,7 +596,7 @@ func guardianAllowTigeraPolicy(cfg *GuardianConfiguration) (*v3.NetworkPolicy, e
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      GuardianPolicyName,
-			Namespace: GuardianNamespace,
+			Namespace: GuardianNamespace(cfg.Installation.Variant),
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,

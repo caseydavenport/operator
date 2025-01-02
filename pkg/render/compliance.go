@@ -276,9 +276,7 @@ func (c *complianceComponent) Ready() bool {
 	return true
 }
 
-var (
-	complianceReplicas int32 = 1
-)
+var complianceReplicas int32 = 1
 
 const complianceServerPort = 5443
 
@@ -1173,7 +1171,8 @@ func (c *complianceComponent) complianceBenchmarkerClusterRole() *rbacv1.Cluster
 	rules = append(rules, rbacv1.PolicyRule{
 		APIGroups: []string{"linseed.tigera.io"},
 		Resources: []string{"benchmarks"},
-		Verbs:     []string{"get", "create"}})
+		Verbs:     []string{"get", "create"},
+	})
 
 	if c.cfg.OpenShift {
 		rules = append(rules,
@@ -1643,7 +1642,7 @@ func (c *complianceComponent) complianceAccessAllowTigeraNetworkPolicy() *v3.Net
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: GuardianEntityRule,
+			Destination: GuardianEntityRule(c.cfg.Installation.Variant),
 		})
 	}
 

@@ -91,8 +91,8 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, k8sClient, log, tierWatchReady)
 
 	go utils.WaitToAddNetworkPolicyWatches(c, k8sClient, log, []types.NamespacedName{
-		{Name: render.GuardianPolicyName, Namespace: render.GuardianNamespace},
-		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: render.GuardianNamespace},
+		{Name: render.GuardianPolicyName, Namespace: render.GuardianNamespace(operatorv1.TigeraSecureEnterprise)},
+		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: render.GuardianNamespace(operatorv1.TigeraSecureEnterprise)},
 	})
 
 	secretsToWatch := []string{}
@@ -150,8 +150,14 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("%s failed to watch ImageSet: %w", controllerName, err)
 	}
 
-	if err := utils.AddDeploymentWatch(c, render.GuardianDeploymentName, render.GuardianNamespace); err != nil {
-		return fmt.Errorf("%s failed to watch Guardian deployment: %w", controllerName, err)
+	if opts.EnterpriseCRDExists {
+		if err := utils.AddDeploymentWatch(c, render.GuardianDeploymentName, render.GuardianNamespace(operatorv1.TigeraSecureEnterprise)); err != nil {
+			return fmt.Errorf("%s failed to watch Guardian deployment: %w", controllerName, err)
+		}
+	} else {
+		if err := utils.AddDeploymentWatch(c, render.GuardianDeploymentName, render.GuardianNamespace(operatorv1.Calico)); err != nil {
+			return fmt.Errorf("%s failed to watch Guardian deployment: %w", controllerName, err)
+		}
 	}
 
 	// Watch for changes to TigeraStatus.
@@ -345,7 +351,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	var currentAvailabilityTransition metav1.Time
 	var currentlyAvailable bool
 	guardianDeployment := v1.Deployment{}
-	err = r.client.Get(ctx, client.ObjectKey{Name: render.GuardianDeploymentName, Namespace: render.GuardianNamespace}, &guardianDeployment)
+	err = r.client.Get(ctx, client.ObjectKey{Name: render.GuardianDeploymentName, Namespace: render.GuardianNamespace(variant)}, &guardianDeployment)
 	if err != nil && !k8serrors.IsNotFound(err) {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to read the deployment status of Guardian", err, reqLogger)
 		return reconcile.Result{}, nil
@@ -372,7 +378,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		pods := corev1.PodList{}
 		err := r.client.List(ctx, &pods, &client.ListOptions{
 			LabelSelector: labelSelector,
-			Namespace:     render.GuardianNamespace,
+			Namespace:     render.GuardianNamespace(variant),
 		})
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to list the pods of the Guardian deployment", err, reqLogger)

@@ -175,7 +175,7 @@ func (r *ReconcileTiers) prepareTiersConfig(ctx context.Context, reqLogger logr.
 	// well-known list of namespaces that contain product code.
 	namespaces := []string{
 		common.CalicoNamespace,
-		render.GuardianNamespace,
+		render.GuardianNamespace(operatorv1.TigeraSecureEnterprise),
 		render.ComplianceNamespace,
 		render.DexNamespace,
 		render.ElasticsearchNamespace,
