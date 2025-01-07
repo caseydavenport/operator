@@ -146,7 +146,7 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 		c.deployment(),
 		c.service(),
 		c.aggregatorService(),
-		// c.aggregatorNetworkPolicy(),
+		c.aggregatorNetworkPolicy(),
 		c.cfg.TrustedCertBundle.ConfigMap(GuardianNamespace(c.cfg.Installation.Variant)),
 
 		// Add tigera-manager service account for impersonation. In managed clusters, the tigera-manager
@@ -308,8 +308,8 @@ func (c *GuardianComponent) aggregatorService() *corev1.Service {
 			Namespace: common.CalicoNamespace,
 		},
 		Spec: corev1.ServiceSpec{
-			Selector: c.deployment().Spec.Template.Labels,
-			Ports:    []corev1.ServicePort{{Port: 443}},
+			Selector: map[string]string{"k8s-app": GuardianName},
+			Ports:    []corev1.ServicePort{{Port: 7443}},
 		},
 	}
 }
@@ -328,6 +328,10 @@ func (c *GuardianComponent) aggregatorContainer() corev1.Container {
 			{
 				Name:  "CA_CERT_PATH",
 				Value: c.cfg.TrustedCertBundle.MountPath(),
+			},
+			{
+				Name:  "PORT",
+				Value: "7443",
 			},
 		},
 	}
@@ -518,7 +522,7 @@ func (c *GuardianComponent) aggregatorNetworkPolicy() *v3.NetworkPolicy {
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
 			Tier:     networkpolicy.TigeraComponentTierName,
-			Selector: networkpolicy.KubernetesAppSelector("goldmane"),
+			Selector: networkpolicy.KubernetesAppSelector(GuardianName),
 			Types:    []v3.PolicyType{v3.PolicyTypeEgress, v3.PolicyTypeIngress},
 			Egress:   egressRules,
 			Ingress:  ingressRules,
