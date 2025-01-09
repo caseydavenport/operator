@@ -1224,6 +1224,21 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
+	// If configured to connect to Calico Cloud, ensure the trusted bundle includes the Calico Cloud CA.
+	// TODO: make this conditional on whether we are configured to connect to CC.
+	// TODO: trusted bundle managed in both this controller and guardian controller???
+	linseedCertName := render.VoltronLinseedPublicCert
+	linseedCertNamespace := common.OperatorNamespace()
+	linseedCertificate, err := certificateManager.GetCertificate(r.client, linseedCertName, linseedCertNamespace)
+	if err != nil && !apierrors.IsNotFound(err) {
+		r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("Failed to retrieve / validate  %s/%s", linseedCertNamespace, linseedCertName), err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	if linseedCertificate != nil {
+		log.Info("Adding Linseed certificate to trusted bundle")
+		typhaNodeTLS.TrustedBundle.AddCertificates(linseedCertificate)
+	}
+
 	nodeAppArmorProfile := ""
 	a := instance.GetObjectMeta().GetAnnotations()
 	if val, ok := a[techPreviewFeatureSeccompApparmor]; ok {

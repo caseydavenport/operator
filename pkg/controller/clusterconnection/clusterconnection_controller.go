@@ -481,6 +481,20 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		}
 	}
 
+	// For OSS managed clusters, we run in calico-system and use the trusted bundle
+	// managed by the cor econtroller.
+	// TODO: Clean this up. This is a hack!
+	var bundle certificatemanagement.TrustedBundleRO
+	if variant == operatorv1.Calico {
+		bundle, err = certificateManager.LoadTrustedBundle(ctx, r.client, common.CalicoNamespace)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting trusted bundle", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+	} else {
+		bundle = trustedCertBundle
+	}
+
 	ch := utils.NewComponentHandler(log, r.client, r.scheme, managementClusterConnection)
 	guardianCfg := &render.GuardianConfiguration{
 		URL:                         managementClusterConnection.Spec.ManagementClusterAddr,
@@ -490,7 +504,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		OpenShift:                   r.provider.IsOpenShift(),
 		Installation:                instl,
 		TunnelSecret:                tunnelSecret,
-		TrustedCertBundle:           trustedCertBundle,
+		TrustedCertBundle:           bundle,
 		ManagementClusterConnection: managementClusterConnection,
 	}
 

@@ -108,7 +108,7 @@ type GuardianConfiguration struct {
 	OpenShift                   bool
 	Installation                *operatorv1.InstallationSpec
 	TunnelSecret                *corev1.Secret
-	TrustedCertBundle           certificatemanagement.TrustedBundle
+	TrustedCertBundle           certificatemanagement.TrustedBundleRO
 	TunnelCAType                operatorv1.CAType
 	ManagementClusterConnection *operatorv1.ManagementClusterConnection
 
@@ -147,7 +147,7 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 		c.service(),
 		c.aggregatorService(),
 		c.aggregatorNetworkPolicy(),
-		c.cfg.TrustedCertBundle.ConfigMap(GuardianNamespace(c.cfg.Installation.Variant)),
+		// c.cfg.TrustedCertBundle.ConfigMap(GuardianNamespace(c.cfg.Installation.Variant)), // TODO: We still need to create this if not running in calico-system.
 
 		// Add tigera-manager service account for impersonation. In managed clusters, the tigera-manager
 		// service account is always within the tigera-manager namespace - regardless of (multi)tenancy mode.
@@ -323,7 +323,7 @@ func (c *GuardianComponent) aggregatorContainer() corev1.Container {
 		Env: []corev1.EnvVar{
 			{
 				Name:  "PUSH_URL",
-				Value: fmt.Sprintf("https://%s.%s.svc/api/v1/flows/logs/bulk", GuardianServiceName, GuardianNamespace("")),
+				Value: fmt.Sprintf("https://%s.%s.svc/api/v1/flows/bulk", GuardianServiceName, GuardianNamespace("")),
 			},
 			{
 				Name:  "CA_CERT_PATH",
