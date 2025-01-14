@@ -6,7 +6,9 @@ components:
   typha:
     version: master
   calico/node:
-    version: master
+    registry: docker.io/caseydavenport/
+    image: node
+    version: ft
   calico/cni:
     version: master
   calico/node-windows:

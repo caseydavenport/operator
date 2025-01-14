@@ -1426,6 +1426,14 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		{Name: "FELIX_HEALTHENABLED", Value: "true"},
 		{Name: "FELIX_HEALTHPORT", Value: fmt.Sprintf("%d", c.cfg.FelixHealthPort)},
 		{
+			Name:  "FELIX_FLOWLOGSGOLDMANESERVER",
+			Value: "goldmane:7443",
+		},
+		{
+			Name:  "FELIX_FLOWLOGSFLUSHINTERVAL",
+			Value: "15s",
+		},
+		{
 			Name: "NODENAME",
 			ValueFrom: &corev1.EnvVarSource{
 				FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
