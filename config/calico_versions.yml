@@ -17,6 +17,8 @@ components:
     version: master
   calico/kube-controllers:
     version: master
+  calico/goldmane:
+    version: master
   flexvol:
     version: master
   calico/apiserver:
