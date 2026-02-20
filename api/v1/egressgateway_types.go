@@ -165,6 +165,7 @@ type EgressGatewayMetadata struct {
 	Annotations map[string]string `json:"annotations,omitempty"`
 }
 
+// +kubebuilder:validation:XValidation:rule="size(self.name) > 0 || size(self.cidr) > 0",message="either name or cidr must be specified"
 type EgressGatewayIPPool struct {
 	// Name is the name of the IPPool that the Egress Gateways can use.
 	// +optional
@@ -264,6 +265,7 @@ type AWSEgressGateway struct {
 
 	// NativeIP defines if EgressGateway is to use an AWS backed IPPool.
 	// Default: Disabled
+	// +kubebuilder:default:=Disabled
 	// +kubebuilder:validation:Enum=Enabled;Disabled
 	// +optional
 	NativeIP *NativeIP `json:"nativeIP,omitempty"`

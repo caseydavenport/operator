@@ -39,9 +39,11 @@ spec:
               description: ApplicationLayerSpec defines the desired state of ApplicationLayer
               properties:
                 applicationLayerPolicy:
+                  default: Disabled
                   description: |-
                     Application Layer Policy controls whether or not ALP enforcement is enabled for the cluster.
                     When enabled, NetworkPolicies with HTTP Match rules may be defined to opt-in workloads for traffic enforcement on the application layer.
+                    Default: Disabled
                   enum:
                     - Enabled
                     - Disabled
@@ -281,20 +283,24 @@ spec:
                       type: integer
                   type: object
                 sidecarInjection:
+                  default: Disabled
                   description: |-
                     SidecarInjection controls whether or not sidecar injection is enabled for the cluster.
                     When enabled, pods with the label
                     "applicationlayer.projectcalico.org/sidecar"="true" will have their L7 functionality
                     such as WAF and ALP implemented using an injected sidecar instead of a per-host proxy.
                     The per-host proxy will continue to be used for pods without this label.
+                    Default: Disabled
                   enum:
                     - Enabled
                     - Disabled
                   type: string
                 webApplicationFirewall:
+                  default: Disabled
                   description: |-
                     WebApplicationFirewall controls whether or not ModSecurity enforcement is enabled for the cluster.
                     When enabled, Services may opt-in to having ingress traffic examed by ModSecurity.
+                    Default: Disabled
                   enum:
                     - Enabled
                     - Disabled

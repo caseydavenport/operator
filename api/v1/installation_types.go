@@ -46,10 +46,50 @@ type Installation struct {
 }
 
 // InstallationSpec defines configuration for a Calico or Calico Enterprise installation.
+//
+// +kubebuilder:validation:XValidation:rule="size(self.flexVolumePath) == 0 || self.flexVolumePath == 'None' || self.flexVolumePath.startsWith('/')",message="spec.flexVolumePath must be 'None' or an absolute path"
+// +kubebuilder:validation:XValidation:rule="size(self.kubeletVolumePluginPath) == 0 || self.kubeletVolumePluginPath == 'None' || self.kubeletVolumePluginPath.startsWith('/')",message="spec.kubeletVolumePluginPath must be 'None' or an absolute path"
+//
+// CNI/Provider compatibility:
+// +kubebuilder:validation:XValidation:rule="!has(self.cni) || self.cni.type != 'GKE' || !has(self.kubernetesProvider) || size(self.kubernetesProvider) == 0 || self.kubernetesProvider == 'GKE'",message="spec.cni.type GKE is only compatible with GKE kubernetesProvider"
+// +kubebuilder:validation:XValidation:rule="!has(self.cni) || self.cni.type != 'AmazonVPC' || !has(self.kubernetesProvider) || size(self.kubernetesProvider) == 0 || self.kubernetesProvider == 'EKS'",message="spec.cni.type AmazonVPC is only compatible with EKS kubernetesProvider"
+// +kubebuilder:validation:XValidation:rule="!has(self.cni) || self.cni.type != 'AzureVNET' || !has(self.kubernetesProvider) || size(self.kubernetesProvider) == 0 || self.kubernetesProvider == 'AKS'",message="spec.cni.type AzureVNET is only compatible with AKS kubernetesProvider"
+//
+// CNI/IPAM compatibility:
+// +kubebuilder:validation:XValidation:rule="!has(self.cni) || self.cni.type != 'Calico' || !has(self.cni.ipam) || self.cni.ipam.type == 'Calico' || self.cni.ipam.type == 'HostLocal'",message="spec.cni.ipam.type must be Calico or HostLocal when using Calico CNI"
+// +kubebuilder:validation:XValidation:rule="!has(self.cni) || self.cni.type != 'GKE' || !has(self.cni.ipam) || self.cni.ipam.type == 'HostLocal'",message="spec.cni.ipam.type must be HostLocal when using GKE CNI"
+// +kubebuilder:validation:XValidation:rule="!has(self.cni) || self.cni.type != 'AmazonVPC' || !has(self.cni.ipam) || self.cni.ipam.type == 'AmazonVPC'",message="spec.cni.ipam.type must be AmazonVPC when using AmazonVPC CNI"
+// +kubebuilder:validation:XValidation:rule="!has(self.cni) || self.cni.type != 'AzureVNET' || !has(self.cni.ipam) || self.cni.ipam.type == 'AzureVNET'",message="spec.cni.ipam.type must be AzureVNET when using AzureVNET CNI"
+//
+// Features requiring Calico CNI:
+// +kubebuilder:validation:XValidation:rule="!has(self.calicoNetwork) || !has(self.calicoNetwork.hostPorts) || self.calicoNetwork.hostPorts != 'Enabled' || !has(self.cni) || self.cni.type == 'Calico'",message="spec.calicoNetwork.hostPorts is only supported with Calico CNI"
+// +kubebuilder:validation:XValidation:rule="!has(self.calicoNetwork) || !has(self.calicoNetwork.multiInterfaceMode) || !has(self.cni) || self.cni.type == 'Calico'",message="spec.calicoNetwork.multiInterfaceMode is only supported with Calico CNI"
+// +kubebuilder:validation:XValidation:rule="!has(self.calicoNetwork) || !has(self.calicoNetwork.containerIPForwarding) || !has(self.cni) || self.cni.type == 'Calico'",message="spec.calicoNetwork.containerIPForwarding is only supported with Calico CNI"
+// +kubebuilder:validation:XValidation:rule="!has(self.logging) || !has(self.logging.cni) || !has(self.cni) || self.cni.type == 'Calico'",message="spec.logging.cni is only supported with Calico CNI"
+//
+// Non-privileged mode constraints:
+// +kubebuilder:validation:XValidation:rule="!has(self.nonPrivileged) || self.nonPrivileged != 'Enabled' || !has(self.calicoNetwork) || !has(self.calicoNetwork.linuxDataplane) || self.calicoNetwork.linuxDataplane != 'BPF'",message="non-privileged mode is not supported with BPF dataplane"
+// +kubebuilder:validation:XValidation:rule="!has(self.nonPrivileged) || self.nonPrivileged != 'Enabled' || !has(self.variant) || self.variant != 'TigeraSecureEnterprise'",message="non-privileged mode is not supported with TigeraSecureEnterprise variant"
+//
+// VPP dataplane constraints:
+// +kubebuilder:validation:XValidation:rule="!has(self.calicoNetwork) || !has(self.calicoNetwork.linuxDataplane) || self.calicoNetwork.linuxDataplane != 'VPP' || !has(self.variant) || self.variant == 'Calico'",message="VPP dataplane only supports the Calico variant"
+// +kubebuilder:validation:XValidation:rule="!has(self.calicoNetwork) || !has(self.calicoNetwork.linuxDataplane) || self.calicoNetwork.linuxDataplane != 'VPP' || !has(self.cni) || self.cni.type == 'Calico'",message="VPP dataplane only supports Calico CNI"
+// +kubebuilder:validation:XValidation:rule="!has(self.calicoNetwork) || !has(self.calicoNetwork.linuxDataplane) || self.calicoNetwork.linuxDataplane != 'VPP' || !has(self.calicoNetwork.bgp) || self.calicoNetwork.bgp == 'Enabled'",message="VPP dataplane requires BGP to be enabled"
+// +kubebuilder:validation:XValidation:rule="!has(self.calicoNetwork) || !has(self.calicoNetwork.linuxDataplane) || self.calicoNetwork.linuxDataplane != 'VPP' || !has(self.calicoNetwork.hostPorts) || self.calicoNetwork.hostPorts != 'Disabled'",message="VPP dataplane does not support disabling hostPorts"
+//
+// FIPS mode constraint:
+// +kubebuilder:validation:XValidation:rule="!has(self.fipsMode) || self.fipsMode != 'Enabled' || !has(self.variant) || self.variant != 'TigeraSecureEnterprise'",message="FIPS mode is not supported with TigeraSecureEnterprise variant"
+//
+// Azure requires AKS:
+// +kubebuilder:validation:XValidation:rule="!has(self.azure) || (has(self.kubernetesProvider) && self.kubernetesProvider == 'AKS')",message="spec.azure is only supported with AKS kubernetesProvider"
+//
+// linuxPolicySetupTimeoutSeconds requires compatible dataplane:
+// +kubebuilder:validation:XValidation:rule="!has(self.calicoNetwork) || !has(self.calicoNetwork.linuxPolicySetupTimeoutSeconds) || !has(self.calicoNetwork.linuxDataplane) || self.calicoNetwork.linuxDataplane != 'VPP'",message="spec.calicoNetwork.linuxPolicySetupTimeoutSeconds is not supported with VPP dataplane"
 type InstallationSpec struct {
 	// Variant is the product to install - one of Calico or TigeraSecureEnterprise
 	// Default: Calico
 	// +optional
+	// +kubebuilder:default:=Calico
 	// +kubebuilder:validation:Enum=Calico;TigeraSecureEnterprise
 	Variant ProductVariant `json:"variant,omitempty"`
 
@@ -130,6 +170,8 @@ type InstallationSpec struct {
 	// ControlPlaneReplicas defines how many replicas of the control plane core components will be deployed.
 	// This field applies to all control plane components that support High Availability. Defaults to 2.
 	// +optional
+	// +kubebuilder:default:=2
+	// +kubebuilder:validation:Minimum=1
 	ControlPlaneReplicas *int32 `json:"controlPlaneReplicas,omitempty"`
 
 	// NodeMetricsPort specifies which port calico/node serves prometheus metrics on. By default, metrics are not enabled.
@@ -152,6 +194,7 @@ type InstallationSpec struct {
 	// CSI will be enabled by default. If set to 'None', CSI will be disabled.
 	// Default: /var/lib/kubelet
 	// +optional
+	// +kubebuilder:default:="/var/lib/kubelet"
 	KubeletVolumePluginPath string `json:"kubeletVolumePluginPath,omitempty"`
 
 	// NodeUpdateStrategy can be used to customize the desired update strategy, such as the MaxUnavailable
@@ -176,7 +219,9 @@ type InstallationSpec struct {
 	TLSCipherSuites TLSCipherSuites `json:"tlsCipherSuites,omitempty"`
 
 	// NonPrivileged configures Calico to be run in non-privileged containers as non-root users where possible.
+	// Default: Disabled
 	// +optional
+	// +kubebuilder:default:=Disabled
 	NonPrivileged *NonPrivilegedType `json:"nonPrivileged,omitempty"`
 
 	// CalicoNodeDaemonSet configures the calico-node DaemonSet. If used in
@@ -333,10 +378,12 @@ type CNILogging struct {
 
 	// Default: 30 (days)
 	// +optional
+	// +kubebuilder:validation:Minimum=1
 	LogFileMaxAgeDays *uint32 `json:"logFileMaxAgeDays,omitempty"`
 
 	// Default: 10
 	// +optional
+	// +kubebuilder:validation:Minimum=1
 	LogFileMaxCount *uint32 `json:"logFileMaxCount,omitempty"`
 }
 
@@ -574,6 +621,7 @@ type CalicoNetworkSpec struct {
 	// If not specified, iptables mode is used.
 	// Default: Iptables
 	// +optional
+	// +kubebuilder:default:=Iptables
 	LinuxDataplane *LinuxDataplaneOption `json:"linuxDataplane,omitempty"`
 
 	// WindowsDataplane is used to select the dataplane used for Windows nodes. In particular, it
@@ -581,6 +629,7 @@ type CalicoNetworkSpec struct {
 	// If not specified, it is disabled and the operator will not render the Calico Windows nodes daemonset.
 	// Default: Disabled
 	// +optional
+	// +kubebuilder:default:=Disabled
 	WindowsDataplane *WindowsDataplaneOption `json:"windowsDataplane,omitempty"`
 
 	// BPFNetworkBootstrap manages the initial networking setup required to configure the BPF dataplane.
@@ -669,12 +718,14 @@ type CalicoNetworkSpec struct {
 	//
 	// Default: 0
 	// +optional
+	// +kubebuilder:validation:Minimum=0
 	LinuxPolicySetupTimeoutSeconds *int32 `json:"linuxPolicySetupTimeoutSeconds,omitempty"`
 }
 
 // NodeAddressAutodetection provides configuration options for auto-detecting node addresses. At most one option
 // can be used. If no detection option is specified, then IP auto detection will be disabled for this address family and IPs
 // must be specified directly on the Node resource.
+// +kubebuilder:validation:XValidation:rule="(has(self.firstFound) && self.firstFound == true ? 1 : 0) + (size(self.interface) > 0 ? 1 : 0) + (size(self.skipInterface) > 0 ? 1 : 0) + (size(self.canReach) > 0 ? 1 : 0) + (size(self.cidrs) > 0 ? 1 : 0) + (has(self.kubernetes) ? 1 : 0) <= 1",message="no more than one node address autodetection method can be specified"
 type NodeAddressAutodetection struct {
 	// FirstFound uses default interface matching parameters to select an interface, performing best-effort
 	// filtering based on well-known interface names.

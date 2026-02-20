@@ -44,6 +44,9 @@ type Authentication struct {
 }
 
 // AuthenticationSpec defines the desired state of Authentication
+// +kubebuilder:validation:XValidation:rule="(has(self.oidc) ? 1 : 0) + (has(self.openshift) ? 1 : 0) + (has(self.ldap) ? 1 : 0) == 1",message="exactly one identity provider (oidc, openshift, or ldap) must be specified"
+// +kubebuilder:validation:XValidation:rule="!has(self.oidc) || size(self.oidc.usernamePrefix) == 0 || size(self.usernamePrefix) == 0 || self.oidc.usernamePrefix == self.usernamePrefix",message="spec.usernamePrefix and spec.oidc.usernamePrefix must not be set to different values"
+// +kubebuilder:validation:XValidation:rule="!has(self.oidc) || size(self.oidc.groupsPrefix) == 0 || size(self.groupsPrefix) == 0 || self.oidc.groupsPrefix == self.groupsPrefix",message="spec.groupsPrefix and spec.oidc.groupsPrefix must not be set to different values"
 type AuthenticationSpec struct {
 	// ManagerDomain is the domain name of the Manager
 	// +required
@@ -121,6 +124,7 @@ type AuthenticationOIDC struct {
 	// To skip this check, set the value to "InsecureSkip".
 	// Default: Verify
 	// +optional
+	// +kubebuilder:default:=Verify
 	// +kubebuilder:validation:Enum=Verify;InsecureSkip
 	EmailVerification *EmailVerificationType `json:"emailVerification,omitempty"`
 
@@ -129,6 +133,7 @@ type AuthenticationOIDC struct {
 	// https://openid.net/specs/openid-connect-core-1_0.html.
 	// Default: "Consent"
 	// +optional
+	// +kubebuilder:validation:XValidation:rule="!self.exists(p, p == 'None') || size(self) == 1",message="PromptType 'None' cannot be combined with other prompt types"
 	PromptTypes []PromptType `json:"promptTypes,omitempty"`
 
 	// Default: "Dex"
@@ -207,6 +212,7 @@ type UserSearch struct {
 	// A mapping of the attribute that is used as the username. This attribute can be used to apply RBAC to a user.
 	// Default: uid
 	// +optional
+	// +kubebuilder:default:=uid
 	NameAttribute string `json:"nameAttribute,omitempty"`
 }
 

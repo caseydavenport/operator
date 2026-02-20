@@ -1388,6 +1388,7 @@ spec:
                         - Enabled
                       type: string
                     linuxDataplane:
+                      default: Iptables
                       description: |-
                         LinuxDataplane is used to select the dataplane used for Linux nodes. In particular, it
                         causes the operator to add required mounts and environment variables for the particular dataplane.
@@ -1409,6 +1410,7 @@ spec:
                         * A value of 0 disables pod startup delays.
                         Default: 0
                       format: int32
+                      minimum: 0
                       type: integer
                     mtu:
                       description: |-
@@ -1465,6 +1467,15 @@ spec:
                             the given regex.
                           type: string
                       type: object
+                      x-kubernetes-validations:
+                        - message:
+                            no more than one node address autodetection method
+                            can be specified
+                          rule:
+                            "(has(self.firstFound) && self.firstFound == true ? 1
+                            : 0) + (size(self.interface) > 0 ? 1 : 0) + (size(self.skipInterface)
+                            > 0 ? 1 : 0) + (size(self.canReach) > 0 ? 1 : 0) + (size(self.cidrs)
+                            > 0 ? 1 : 0) + (has(self.kubernetes) ? 1 : 0) <= 1"
                     nodeAddressAutodetectionV6:
                       description: |-
                         NodeAddressAutodetectionV6 specifies an approach to automatically detect node IPv6 addresses. If not specified,
@@ -1505,6 +1516,15 @@ spec:
                             the given regex.
                           type: string
                       type: object
+                      x-kubernetes-validations:
+                        - message:
+                            no more than one node address autodetection method
+                            can be specified
+                          rule:
+                            "(has(self.firstFound) && self.firstFound == true ? 1
+                            : 0) + (size(self.interface) > 0 ? 1 : 0) + (size(self.skipInterface)
+                            > 0 ? 1 : 0) + (size(self.canReach) > 0 ? 1 : 0) + (size(self.cidrs)
+                            > 0 ? 1 : 0) + (has(self.kubernetes) ? 1 : 0) <= 1"
                     sysctl:
                       description: Sysctl configures sysctl parameters for tuning plugin
                       items:
@@ -1523,6 +1543,7 @@ spec:
                         type: object
                       type: array
                     windowsDataplane:
+                      default: Disabled
                       description: |-
                         WindowsDataplane is used to select the dataplane used for Windows nodes. In particular, it
                         causes the operator to add required mounts and environment variables for the particular dataplane.
@@ -5552,10 +5573,12 @@ spec:
                     components. This is globally applied to all resources created by the operator excluding daemonsets.
                   type: object
                 controlPlaneReplicas:
+                  default: 2
                   description: |-
                     ControlPlaneReplicas defines how many replicas of the control plane core components will be deployed.
                     This field applies to all control plane components that support High Availability. Defaults to 2.
                   format: int32
+                  minimum: 1
                   type: integer
                 controlPlaneTolerations:
                   description: |-
@@ -6847,6 +6870,7 @@ spec:
                     x-kubernetes-map-type: atomic
                   type: array
                 kubeletVolumePluginPath:
+                  default: /var/lib/kubelet
                   description: |-
                     KubeletVolumePluginPath optionally specifies enablement of Calico CSI plugin. If not specified,
                     CSI will be enabled by default. If set to 'None', CSI will be disabled.
@@ -6878,10 +6902,12 @@ spec:
                         logFileMaxAgeDays:
                           description: "Default: 30 (days)"
                           format: int32
+                          minimum: 1
                           type: integer
                         logFileMaxCount:
                           description: "Default: 10"
                           format: int32
+                          minimum: 1
                           type: integer
                         logFileMaxSize:
                           anyOf:
@@ -6969,9 +6995,10 @@ spec:
                       type: string
                   type: object
                 nonPrivileged:
-                  description:
-                    NonPrivileged configures Calico to be run in non-privileged
-                    containers as non-root users where possible.
+                  default: Disabled
+                  description: |-
+                    NonPrivileged configures Calico to be run in non-privileged containers as non-root users where possible.
+                    Default: Disabled
                   type: string
                 proxy:
                   description: |-
@@ -8770,6 +8797,7 @@ spec:
                   format: int32
                   type: integer
                 variant:
+                  default: Calico
                   description: |-
                     Variant is the product to install - one of Calico or TigeraSecureEnterprise
                     Default: Calico
@@ -8814,6 +8842,119 @@ spec:
                       type: string
                   type: object
               type: object
+              x-kubernetes-validations:
+                - message: spec.flexVolumePath must be 'None' or an absolute path
+                  rule:
+                    size(self.flexVolumePath) == 0 || self.flexVolumePath == 'None'
+                    || self.flexVolumePath.startsWith('/')
+                - message:
+                    spec.kubeletVolumePluginPath must be 'None' or an absolute
+                    path
+                  rule:
+                    size(self.kubeletVolumePluginPath) == 0 || self.kubeletVolumePluginPath
+                    == 'None' || self.kubeletVolumePluginPath.startsWith('/')
+                - message: spec.cni.type GKE is only compatible with GKE kubernetesProvider
+                  rule:
+                    "!has(self.cni) || self.cni.type != 'GKE' || !has(self.kubernetesProvider)
+                    || size(self.kubernetesProvider) == 0 || self.kubernetesProvider ==
+                    'GKE'"
+                - message: spec.cni.type AmazonVPC is only compatible with EKS kubernetesProvider
+                  rule:
+                    "!has(self.cni) || self.cni.type != 'AmazonVPC' || !has(self.kubernetesProvider)
+                    || size(self.kubernetesProvider) == 0 || self.kubernetesProvider ==
+                    'EKS'"
+                - message: spec.cni.type AzureVNET is only compatible with AKS kubernetesProvider
+                  rule:
+                    "!has(self.cni) || self.cni.type != 'AzureVNET' || !has(self.kubernetesProvider)
+                    || size(self.kubernetesProvider) == 0 || self.kubernetesProvider ==
+                    'AKS'"
+                - message:
+                    spec.cni.ipam.type must be Calico or HostLocal when using Calico
+                    CNI
+                  rule:
+                    "!has(self.cni) || self.cni.type != 'Calico' || !has(self.cni.ipam)
+                    || self.cni.ipam.type == 'Calico' || self.cni.ipam.type == 'HostLocal'"
+                - message: spec.cni.ipam.type must be HostLocal when using GKE CNI
+                  rule:
+                    "!has(self.cni) || self.cni.type != 'GKE' || !has(self.cni.ipam)
+                    || self.cni.ipam.type == 'HostLocal'"
+                - message: spec.cni.ipam.type must be AmazonVPC when using AmazonVPC CNI
+                  rule:
+                    "!has(self.cni) || self.cni.type != 'AmazonVPC' || !has(self.cni.ipam)
+                    || self.cni.ipam.type == 'AmazonVPC'"
+                - message: spec.cni.ipam.type must be AzureVNET when using AzureVNET CNI
+                  rule:
+                    "!has(self.cni) || self.cni.type != 'AzureVNET' || !has(self.cni.ipam)
+                    || self.cni.ipam.type == 'AzureVNET'"
+                - message:
+                    spec.calicoNetwork.hostPorts is only supported with Calico
+                    CNI
+                  rule:
+                    "!has(self.calicoNetwork) || !has(self.calicoNetwork.hostPorts)
+                    || self.calicoNetwork.hostPorts != 'Enabled' || !has(self.cni) ||
+                    self.cni.type == 'Calico'"
+                - message:
+                    spec.calicoNetwork.multiInterfaceMode is only supported with
+                    Calico CNI
+                  rule:
+                    "!has(self.calicoNetwork) || !has(self.calicoNetwork.multiInterfaceMode)
+                    || !has(self.cni) || self.cni.type == 'Calico'"
+                - message:
+                    spec.calicoNetwork.containerIPForwarding is only supported
+                    with Calico CNI
+                  rule:
+                    "!has(self.calicoNetwork) || !has(self.calicoNetwork.containerIPForwarding)
+                    || !has(self.cni) || self.cni.type == 'Calico'"
+                - message: spec.logging.cni is only supported with Calico CNI
+                  rule:
+                    "!has(self.logging) || !has(self.logging.cni) || !has(self.cni)
+                    || self.cni.type == 'Calico'"
+                - message: non-privileged mode is not supported with BPF dataplane
+                  rule:
+                    "!has(self.nonPrivileged) || self.nonPrivileged != 'Enabled'
+                    || !has(self.calicoNetwork) || !has(self.calicoNetwork.linuxDataplane)
+                    || self.calicoNetwork.linuxDataplane != 'BPF'"
+                - message:
+                    non-privileged mode is not supported with TigeraSecureEnterprise
+                    variant
+                  rule:
+                    "!has(self.nonPrivileged) || self.nonPrivileged != 'Enabled'
+                    || !has(self.variant) || self.variant != 'TigeraSecureEnterprise'"
+                - message: VPP dataplane only supports the Calico variant
+                  rule:
+                    "!has(self.calicoNetwork) || !has(self.calicoNetwork.linuxDataplane)
+                    || self.calicoNetwork.linuxDataplane != 'VPP' || !has(self.variant)
+                    || self.variant == 'Calico'"
+                - message: VPP dataplane only supports Calico CNI
+                  rule:
+                    "!has(self.calicoNetwork) || !has(self.calicoNetwork.linuxDataplane)
+                    || self.calicoNetwork.linuxDataplane != 'VPP' || !has(self.cni)
+                    || self.cni.type == 'Calico'"
+                - message: VPP dataplane requires BGP to be enabled
+                  rule:
+                    "!has(self.calicoNetwork) || !has(self.calicoNetwork.linuxDataplane)
+                    || self.calicoNetwork.linuxDataplane != 'VPP' || !has(self.calicoNetwork.bgp)
+                    || self.calicoNetwork.bgp == 'Enabled'"
+                - message: VPP dataplane does not support disabling hostPorts
+                  rule:
+                    "!has(self.calicoNetwork) || !has(self.calicoNetwork.linuxDataplane)
+                    || self.calicoNetwork.linuxDataplane != 'VPP' || !has(self.calicoNetwork.hostPorts)
+                    || self.calicoNetwork.hostPorts != 'Disabled'"
+                - message: FIPS mode is not supported with TigeraSecureEnterprise variant
+                  rule:
+                    "!has(self.fipsMode) || self.fipsMode != 'Enabled' || !has(self.variant)
+                    || self.variant != 'TigeraSecureEnterprise'"
+                - message: spec.azure is only supported with AKS kubernetesProvider
+                  rule:
+                    "!has(self.azure) || (has(self.kubernetesProvider) && self.kubernetesProvider
+                    == 'AKS')"
+                - message:
+                    spec.calicoNetwork.linuxPolicySetupTimeoutSeconds is not supported
+                    with VPP dataplane
+                  rule:
+                    "!has(self.calicoNetwork) || !has(self.calicoNetwork.linuxPolicySetupTimeoutSeconds)
+                    || !has(self.calicoNetwork.linuxDataplane) || self.calicoNetwork.linuxDataplane
+                    != 'VPP'"
             status:
               description:
                 Most recently observed state for the Calico or Calico Enterprise
@@ -10200,6 +10341,7 @@ spec:
                             - Enabled
                           type: string
                         linuxDataplane:
+                          default: Iptables
                           description: |-
                             LinuxDataplane is used to select the dataplane used for Linux nodes. In particular, it
                             causes the operator to add required mounts and environment variables for the particular dataplane.
@@ -10221,6 +10363,7 @@ spec:
                             * A value of 0 disables pod startup delays.
                             Default: 0
                           format: int32
+                          minimum: 0
                           type: integer
                         mtu:
                           description: |-
@@ -10277,6 +10420,15 @@ spec:
                                 the given regex.
                               type: string
                           type: object
+                          x-kubernetes-validations:
+                            - message:
+                                no more than one node address autodetection method
+                                can be specified
+                              rule:
+                                "(has(self.firstFound) && self.firstFound == true
+                                ? 1 : 0) + (size(self.interface) > 0 ? 1 : 0) + (size(self.skipInterface)
+                                > 0 ? 1 : 0) + (size(self.canReach) > 0 ? 1 : 0) + (size(self.cidrs)
+                                > 0 ? 1 : 0) + (has(self.kubernetes) ? 1 : 0) <= 1"
                         nodeAddressAutodetectionV6:
                           description: |-
                             NodeAddressAutodetectionV6 specifies an approach to automatically detect node IPv6 addresses. If not specified,
@@ -10317,6 +10469,15 @@ spec:
                                 the given regex.
                               type: string
                           type: object
+                          x-kubernetes-validations:
+                            - message:
+                                no more than one node address autodetection method
+                                can be specified
+                              rule:
+                                "(has(self.firstFound) && self.firstFound == true
+                                ? 1 : 0) + (size(self.interface) > 0 ? 1 : 0) + (size(self.skipInterface)
+                                > 0 ? 1 : 0) + (size(self.canReach) > 0 ? 1 : 0) + (size(self.cidrs)
+                                > 0 ? 1 : 0) + (has(self.kubernetes) ? 1 : 0) <= 1"
                         sysctl:
                           description:
                             Sysctl configures sysctl parameters for tuning
@@ -10337,6 +10498,7 @@ spec:
                             type: object
                           type: array
                         windowsDataplane:
+                          default: Disabled
                           description: |-
                             WindowsDataplane is used to select the dataplane used for Windows nodes. In particular, it
                             causes the operator to add required mounts and environment variables for the particular dataplane.
@@ -14442,10 +14604,12 @@ spec:
                         components. This is globally applied to all resources created by the operator excluding daemonsets.
                       type: object
                     controlPlaneReplicas:
+                      default: 2
                       description: |-
                         ControlPlaneReplicas defines how many replicas of the control plane core components will be deployed.
                         This field applies to all control plane components that support High Availability. Defaults to 2.
                       format: int32
+                      minimum: 1
                       type: integer
                     controlPlaneTolerations:
                       description: |-
@@ -15762,6 +15926,7 @@ spec:
                         x-kubernetes-map-type: atomic
                       type: array
                     kubeletVolumePluginPath:
+                      default: /var/lib/kubelet
                       description: |-
                         KubeletVolumePluginPath optionally specifies enablement of Calico CSI plugin. If not specified,
                         CSI will be enabled by default. If set to 'None', CSI will be disabled.
@@ -15795,10 +15960,12 @@ spec:
                             logFileMaxAgeDays:
                               description: "Default: 30 (days)"
                               format: int32
+                              minimum: 1
                               type: integer
                             logFileMaxCount:
                               description: "Default: 10"
                               format: int32
+                              minimum: 1
                               type: integer
                             logFileMaxSize:
                               anyOf:
@@ -15886,9 +16053,10 @@ spec:
                           type: string
                       type: object
                     nonPrivileged:
-                      description:
-                        NonPrivileged configures Calico to be run in non-privileged
-                        containers as non-root users where possible.
+                      default: Disabled
+                      description: |-
+                        NonPrivileged configures Calico to be run in non-privileged containers as non-root users where possible.
+                        Default: Disabled
                       type: string
                     proxy:
                       description: |-
@@ -17712,6 +17880,7 @@ spec:
                       format: int32
                       type: integer
                     variant:
+                      default: Calico
                       description: |-
                         Variant is the product to install - one of Calico or TigeraSecureEnterprise
                         Default: Calico
@@ -17756,6 +17925,125 @@ spec:
                           type: string
                       type: object
                   type: object
+                  x-kubernetes-validations:
+                    - message: spec.flexVolumePath must be 'None' or an absolute path
+                      rule:
+                        size(self.flexVolumePath) == 0 || self.flexVolumePath == 'None'
+                        || self.flexVolumePath.startsWith('/')
+                    - message:
+                        spec.kubeletVolumePluginPath must be 'None' or an absolute
+                        path
+                      rule:
+                        size(self.kubeletVolumePluginPath) == 0 || self.kubeletVolumePluginPath
+                        == 'None' || self.kubeletVolumePluginPath.startsWith('/')
+                    - message: spec.cni.type GKE is only compatible with GKE kubernetesProvider
+                      rule:
+                        "!has(self.cni) || self.cni.type != 'GKE' || !has(self.kubernetesProvider)
+                        || size(self.kubernetesProvider) == 0 || self.kubernetesProvider
+                        == 'GKE'"
+                    - message: spec.cni.type AmazonVPC is only compatible with EKS kubernetesProvider
+                      rule:
+                        "!has(self.cni) || self.cni.type != 'AmazonVPC' || !has(self.kubernetesProvider)
+                        || size(self.kubernetesProvider) == 0 || self.kubernetesProvider
+                        == 'EKS'"
+                    - message: spec.cni.type AzureVNET is only compatible with AKS kubernetesProvider
+                      rule:
+                        "!has(self.cni) || self.cni.type != 'AzureVNET' || !has(self.kubernetesProvider)
+                        || size(self.kubernetesProvider) == 0 || self.kubernetesProvider
+                        == 'AKS'"
+                    - message:
+                        spec.cni.ipam.type must be Calico or HostLocal when using
+                        Calico CNI
+                      rule:
+                        "!has(self.cni) || self.cni.type != 'Calico' || !has(self.cni.ipam)
+                        || self.cni.ipam.type == 'Calico' || self.cni.ipam.type == 'HostLocal'"
+                    - message: spec.cni.ipam.type must be HostLocal when using GKE CNI
+                      rule:
+                        "!has(self.cni) || self.cni.type != 'GKE' || !has(self.cni.ipam)
+                        || self.cni.ipam.type == 'HostLocal'"
+                    - message:
+                        spec.cni.ipam.type must be AmazonVPC when using AmazonVPC
+                        CNI
+                      rule:
+                        "!has(self.cni) || self.cni.type != 'AmazonVPC' || !has(self.cni.ipam)
+                        || self.cni.ipam.type == 'AmazonVPC'"
+                    - message:
+                        spec.cni.ipam.type must be AzureVNET when using AzureVNET
+                        CNI
+                      rule:
+                        "!has(self.cni) || self.cni.type != 'AzureVNET' || !has(self.cni.ipam)
+                        || self.cni.ipam.type == 'AzureVNET'"
+                    - message:
+                        spec.calicoNetwork.hostPorts is only supported with Calico
+                        CNI
+                      rule:
+                        "!has(self.calicoNetwork) || !has(self.calicoNetwork.hostPorts)
+                        || self.calicoNetwork.hostPorts != 'Enabled' || !has(self.cni)
+                        || self.cni.type == 'Calico'"
+                    - message:
+                        spec.calicoNetwork.multiInterfaceMode is only supported
+                        with Calico CNI
+                      rule:
+                        "!has(self.calicoNetwork) || !has(self.calicoNetwork.multiInterfaceMode)
+                        || !has(self.cni) || self.cni.type == 'Calico'"
+                    - message:
+                        spec.calicoNetwork.containerIPForwarding is only supported
+                        with Calico CNI
+                      rule:
+                        "!has(self.calicoNetwork) || !has(self.calicoNetwork.containerIPForwarding)
+                        || !has(self.cni) || self.cni.type == 'Calico'"
+                    - message: spec.logging.cni is only supported with Calico CNI
+                      rule:
+                        "!has(self.logging) || !has(self.logging.cni) || !has(self.cni)
+                        || self.cni.type == 'Calico'"
+                    - message: non-privileged mode is not supported with BPF dataplane
+                      rule:
+                        "!has(self.nonPrivileged) || self.nonPrivileged != 'Enabled'
+                        || !has(self.calicoNetwork) || !has(self.calicoNetwork.linuxDataplane)
+                        || self.calicoNetwork.linuxDataplane != 'BPF'"
+                    - message:
+                        non-privileged mode is not supported with TigeraSecureEnterprise
+                        variant
+                      rule:
+                        "!has(self.nonPrivileged) || self.nonPrivileged != 'Enabled'
+                        || !has(self.variant) || self.variant != 'TigeraSecureEnterprise'"
+                    - message: VPP dataplane only supports the Calico variant
+                      rule:
+                        "!has(self.calicoNetwork) || !has(self.calicoNetwork.linuxDataplane)
+                        || self.calicoNetwork.linuxDataplane != 'VPP' || !has(self.variant)
+                        || self.variant == 'Calico'"
+                    - message: VPP dataplane only supports Calico CNI
+                      rule:
+                        "!has(self.calicoNetwork) || !has(self.calicoNetwork.linuxDataplane)
+                        || self.calicoNetwork.linuxDataplane != 'VPP' || !has(self.cni)
+                        || self.cni.type == 'Calico'"
+                    - message: VPP dataplane requires BGP to be enabled
+                      rule:
+                        "!has(self.calicoNetwork) || !has(self.calicoNetwork.linuxDataplane)
+                        || self.calicoNetwork.linuxDataplane != 'VPP' || !has(self.calicoNetwork.bgp)
+                        || self.calicoNetwork.bgp == 'Enabled'"
+                    - message: VPP dataplane does not support disabling hostPorts
+                      rule:
+                        "!has(self.calicoNetwork) || !has(self.calicoNetwork.linuxDataplane)
+                        || self.calicoNetwork.linuxDataplane != 'VPP' || !has(self.calicoNetwork.hostPorts)
+                        || self.calicoNetwork.hostPorts != 'Disabled'"
+                    - message:
+                        FIPS mode is not supported with TigeraSecureEnterprise
+                        variant
+                      rule:
+                        "!has(self.fipsMode) || self.fipsMode != 'Enabled' || !has(self.variant)
+                        || self.variant != 'TigeraSecureEnterprise'"
+                    - message: spec.azure is only supported with AKS kubernetesProvider
+                      rule:
+                        "!has(self.azure) || (has(self.kubernetesProvider) && self.kubernetesProvider
+                        == 'AKS')"
+                    - message:
+                        spec.calicoNetwork.linuxPolicySetupTimeoutSeconds is not
+                        supported with VPP dataplane
+                      rule:
+                        "!has(self.calicoNetwork) || !has(self.calicoNetwork.linuxPolicySetupTimeoutSeconds)
+                        || !has(self.calicoNetwork.linuxDataplane) || self.calicoNetwork.linuxDataplane
+                        != 'VPP'"
                 conditions:
                   description: |-
                     Conditions represents the latest observed set of conditions for the component. A component may be one or more of

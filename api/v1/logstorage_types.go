@@ -40,6 +40,7 @@ type LogStorageSpec struct {
 	// cannot be guaranteed during upgrades. See https://docs.tigera.io/maintenance/upgrading for up-to-date instructions.
 	// Default: tigera-elasticsearch
 	// +optional
+	// +kubebuilder:default:="tigera-elasticsearch"
 	StorageClassName string `json:"storageClassName,omitempty"`
 
 	// DataNodeSelector gives you more control over the node that Elasticsearch will run on. The contents of DataNodeSelector will
@@ -129,6 +130,7 @@ type NodeSetSelectionAttribute struct {
 type Indices struct {
 	// Replicas defines how many replicas each index will have. See https://www.elastic.co/guide/en/elasticsearch/reference/current/scalability.html
 	// +optional
+	// +kubebuilder:default:=0
 	Replicas *int32 `json:"replicas,omitempty"`
 }
 
@@ -138,12 +140,14 @@ type Retention struct {
 	// are removed.  To keep logs for at least x days, use a retention period of x+1.
 	// Default: 8
 	// +optional
+	// +kubebuilder:default:=8
 	Flows *int32 `json:"flows"`
 
 	// AuditReports configures the retention period for audit logs, in days.  Logs written on a day that started at least this long ago are
 	// removed.  To keep logs for at least x days, use a retention period of x+1.
 	// Default: 91
 	// +optional
+	// +kubebuilder:default:=91
 	AuditReports *int32 `json:"auditReports"`
 
 	// Snapshots configures the retention period for snapshots, in days. Snapshots are periodic captures
@@ -153,6 +157,7 @@ type Retention struct {
 	// removed.  To keep logs for at least x days, use a retention period of x+1.
 	// Default: 91
 	// +optional
+	// +kubebuilder:default:=91
 	Snapshots *int32 `json:"snapshots"`
 
 	// ComplianceReports configures the retention period for compliance reports, in days. Reports are output
@@ -162,18 +167,21 @@ type Retention struct {
 	// removed.  To keep logs for at least x days, use a retention period of x+1.
 	// Default: 91
 	// +optional
+	// +kubebuilder:default:=91
 	ComplianceReports *int32 `json:"complianceReports"`
 
 	// DNSLogs configures the retention period for DNS logs, in days.  Logs written on a day that started at least this long ago
 	// are removed.  To keep logs for at least x days, use a retention period of x+1.
 	// Default: 8
 	// +optional
+	// +kubebuilder:default:=8
 	DNSLogs *int32 `json:"dnsLogs"`
 
 	// BGPLogs configures the retention period for BGP logs, in days.  Logs written on a day that started at least this long ago
 	// are removed.  To keep logs for at least x days, use a retention period of x+1.
 	// Default: 8
 	// +optional
+	// +kubebuilder:default:=8
 	BGPLogs *int32 `json:"bgpLogs"`
 }
 

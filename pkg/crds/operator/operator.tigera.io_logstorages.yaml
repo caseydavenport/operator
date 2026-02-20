@@ -694,6 +694,7 @@ spec:
                     Elasticsearch cluster.
                   properties:
                     replicas:
+                      default: 0
                       description:
                         Replicas defines how many replicas each index will
                         have. See https://www.elastic.co/guide/en/elasticsearch/reference/current/scalability.html
@@ -1179,6 +1180,7 @@ spec:
                     cluster before it is cleared.
                   properties:
                     auditReports:
+                      default: 91
                       description: |-
                         AuditReports configures the retention period for audit logs, in days.  Logs written on a day that started at least this long ago are
                         removed.  To keep logs for at least x days, use a retention period of x+1.
@@ -1186,6 +1188,7 @@ spec:
                       format: int32
                       type: integer
                     bgpLogs:
+                      default: 8
                       description: |-
                         BGPLogs configures the retention period for BGP logs, in days.  Logs written on a day that started at least this long ago
                         are removed.  To keep logs for at least x days, use a retention period of x+1.
@@ -1193,6 +1196,7 @@ spec:
                       format: int32
                       type: integer
                     complianceReports:
+                      default: 91
                       description: |-
                         ComplianceReports configures the retention period for compliance reports, in days. Reports are output
                         from the analysis of the system state and audit events for compliance reporting.
@@ -1203,6 +1207,7 @@ spec:
                       format: int32
                       type: integer
                     dnsLogs:
+                      default: 8
                       description: |-
                         DNSLogs configures the retention period for DNS logs, in days.  Logs written on a day that started at least this long ago
                         are removed.  To keep logs for at least x days, use a retention period of x+1.
@@ -1210,6 +1215,7 @@ spec:
                       format: int32
                       type: integer
                     flows:
+                      default: 8
                       description: |-
                         Flows configures the retention period for flow logs, in days.  Logs written on a day that started at least this long ago
                         are removed.  To keep logs for at least x days, use a retention period of x+1.
@@ -1217,6 +1223,7 @@ spec:
                       format: int32
                       type: integer
                     snapshots:
+                      default: 91
                       description: |-
                         Snapshots configures the retention period for snapshots, in days. Snapshots are periodic captures
                         of resources which along with audit events are used to generate reports.
@@ -1228,6 +1235,7 @@ spec:
                       type: integer
                   type: object
                 storageClassName:
+                  default: tigera-elasticsearch
                   description: |-
                     StorageClassName will populate the PersistentVolumeClaim.StorageClassName that is used to provision disks to the
                     Tigera Elasticsearch cluster. The StorageClassName should only be modified when no LogStorage is currently

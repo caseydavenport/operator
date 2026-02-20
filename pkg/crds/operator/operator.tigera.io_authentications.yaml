@@ -309,6 +309,7 @@ spec:
                             For example "(objectClass=person)"
                           type: string
                         nameAttribute:
+                          default: uid
                           description: |-
                             A mapping of the attribute that is used as the username. This attribute can be used to apply RBAC to a user.
                             Default: uid
@@ -329,6 +330,7 @@ spec:
                     authentication.
                   properties:
                     emailVerification:
+                      default: Verify
                       description: |-
                         Some providers do not include the claim "email_verified" when there is no verification in the user enrollment
                         process or if they are acting as a proxy for another identity provider. By default those tokens are deemed invalid.
@@ -369,6 +371,11 @@ spec:
                           - SelectAccount
                         type: string
                       type: array
+                      x-kubernetes-validations:
+                        - message:
+                            PromptType 'None' cannot be combined with other prompt
+                            types
+                          rule: "!self.exists(p, p == 'None') || size(self) == 1"
                     requestedScopes:
                       description: |-
                         RequestedScopes is a list of scopes to request from the OIDC provider. If not provided, the following scopes are
@@ -418,6 +425,25 @@ spec:
               required:
                 - managerDomain
               type: object
+              x-kubernetes-validations:
+                - message:
+                    exactly one identity provider (oidc, openshift, or ldap) must
+                    be specified
+                  rule:
+                    "(has(self.oidc) ? 1 : 0) + (has(self.openshift) ? 1 : 0) + (has(self.ldap)
+                    ? 1 : 0) == 1"
+                - message:
+                    spec.usernamePrefix and spec.oidc.usernamePrefix must not be
+                    set to different values
+                  rule:
+                    "!has(self.oidc) || size(self.oidc.usernamePrefix) == 0 || size(self.usernamePrefix)
+                    == 0 || self.oidc.usernamePrefix == self.usernamePrefix"
+                - message:
+                    spec.groupsPrefix and spec.oidc.groupsPrefix must not be set
+                    to different values
+                  rule:
+                    "!has(self.oidc) || size(self.oidc.groupsPrefix) == 0 || size(self.groupsPrefix)
+                    == 0 || self.oidc.groupsPrefix == self.groupsPrefix"
             status:
               description: AuthenticationStatus defines the observed state of Authentication
               properties:

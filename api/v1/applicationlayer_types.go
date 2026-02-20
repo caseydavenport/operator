@@ -24,11 +24,17 @@ import (
 type ApplicationLayerSpec struct {
 	// WebApplicationFirewall controls whether or not ModSecurity enforcement is enabled for the cluster.
 	// When enabled, Services may opt-in to having ingress traffic examed by ModSecurity.
+	// Default: Disabled
+	// +optional
+	// +kubebuilder:default:=Disabled
 	WebApplicationFirewall *WAFStatusType `json:"webApplicationFirewall,omitempty"`
 	// Specification for application layer (L7) log collection.
 	LogCollection *LogCollectionSpec `json:"logCollection,omitempty"`
 	// Application Layer Policy controls whether or not ALP enforcement is enabled for the cluster.
 	// When enabled, NetworkPolicies with HTTP Match rules may be defined to opt-in workloads for traffic enforcement on the application layer.
+	// Default: Disabled
+	// +optional
+	// +kubebuilder:default:=Disabled
 	ApplicationLayerPolicy *ApplicationLayerPolicyStatusType `json:"applicationLayerPolicy,omitempty"`
 	// User-configurable settings for the Envoy proxy.
 	EnvoySettings *EnvoySettings `json:"envoy,omitempty"`
@@ -42,7 +48,9 @@ type ApplicationLayerSpec struct {
 	// "applicationlayer.projectcalico.org/sidecar"="true" will have their L7 functionality
 	// such as WAF and ALP implemented using an injected sidecar instead of a per-host proxy.
 	// The per-host proxy will continue to be used for pods without this label.
+	// Default: Disabled
 	// +optional
+	// +kubebuilder:default:=Disabled
 	SidecarInjection *SidecarStatusType `json:"sidecarInjection,omitempty"`
 }
 

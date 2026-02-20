@@ -51,6 +51,7 @@ spec:
                         type: string
                       type: array
                     nativeIP:
+                      default: Disabled
                       description: |-
                         NativeIP defines if EgressGateway is to use an AWS backed IPPool.
                         Default: Disabled
@@ -173,6 +174,9 @@ spec:
                           Gateways can use.
                         type: string
                     type: object
+                    x-kubernetes-validations:
+                      - message: either name or cidr must be specified
+                        rule: size(self.name) > 0 || size(self.cidr) > 0
                   type: array
                 logSeverity:
                   default: Info

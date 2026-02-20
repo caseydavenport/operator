@@ -34,6 +34,7 @@ type LogCollectorSpec struct {
 	// If Enabled, this feature sets hostPID to true in order to read process cmdline.
 	// Default: Enabled
 	// +optional
+	// +kubebuilder:default:=Enabled
 	// +kubebuilder:validation:Enum=Enabled;Disabled
 	CollectProcessPath *CollectProcessPathOption `json:"collectProcessPath,omitempty"`
 
@@ -169,6 +170,7 @@ type SyslogStoreSpec struct {
 	// Encryption configures traffic encryption to the Syslog server.
 	// Default: None
 	// +optional
+	// +kubebuilder:default:=None
 	// +kubebuilder:validation:Enum=None;TLS
 	Encryption EncryptionOption `json:"encryption,omitempty"`
 
